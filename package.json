@@ -1,0 +1,24 @@
+{
+  "name": "unzipit.js",
+  "version": "0.0.1",
+  "description": "random access unzip library for JavaScript",
+  "main": "dist/index.js",
+  "module": "src/index.js",
+  "scripts": {
+    "test": "node test/puppeteer.notjs"
+  },
+  "files": [
+    "src/**",
+    "dist/**"
+  ],
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "chai": "^4.2.0",
+    "eslint": "^6.0.1",
+    "express": "^4.17.1",
+    "mocha": "^6.2.0",
+    "puppeteer": "^1.19.0"
+  }
+}

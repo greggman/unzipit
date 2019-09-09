@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Mocha</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="mocha.css">
+  </head>
+  <body>
+    <div id="mocha"></div>
+    <script>
+      function makePromise() {
+        const info = {};
+        const promise = new Promise((resolve, reject) => {
+          Object.assign(info, {resolve, reject});
+        });
+        info.promise = promise;
+        return info;
+      }
+
+      window.testsPromiseInfo = makePromise();
+    </script>
+    <script src="../node_modules/chai/chai.js"></script>
+    <script src="mocha.js"></script>
+    <script>mocha.setup('bdd');</script>
+    <script type="module">
+      import './tests/ArrayBufferReader-test.js';
+
+      const settings = Object.fromEntries(new URLSearchParams(window.location.search).entries());
+      if (settings.reporter) {
+        mocha.reporter(settings.reporter);
+      }
+      mocha.run((failures) => {
+        window.testsPromiseInfo.resolve(failures);
+      });
+    </script>
+  </body>
+</html>

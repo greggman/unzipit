@@ -1,0 +1,36 @@
+const puppeteer = require('puppeteer');
+const path = require('path');
+const express = require('express');
+const app = express();
+const port = 3000;
+
+app.use(express.static(path.dirname(__dirname)));
+const server = app.listen(port, () => {
+  console.log(`Example app listening on port ${port}!`);
+  test(port);
+});
+
+async function test(port) {
+  const browser = await puppeteer.launch();
+  const page = await browser.newPage();
+
+  page.on("console", msg => console.log(msg.text()));
+
+  // Get the "viewport" of the page, as reported by the page.
+  page.on('domcontentloaded', async () => {
+    const resultsJSON = await page.evaluate(() => {
+      return window.testsPromiseInfo.promise;
+    });
+
+    console.log(resultsJSON);
+
+    await browser.close();
+    server.close();
+
+    const results = JSON.parse(resultsJSON);
+
+    process.exit((results.failures || results.pending) ? 1 : 0);
+  });
+
+  await page.goto(`http://localhost:${port}/test/index.html?reporter=json`);
+}
