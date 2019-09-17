@@ -1,6 +1,6 @@
 # unzipit.js
 
-Random access unzip library for JavaScript
+Random access unzip library for browser based JavaScript
 
 ## How to use
 
@@ -26,13 +26,14 @@ async function readFiles(url) {
 }
 ```
 
-You can also pass a Blob or ArrayBuffer
+You can also pass a Blob, ArrayBuffer, or TypedArray
 
 ## Why?
 
-All the js libraries I looked at would decompress all files in the zip file.
+Most of the js libraries I looked at would decompress all files in the zip file.
 That's probably the most common use case but it didn't fit my needs. I needed
-to, as fast as possible, open a zip and read a specific file.
+to, as fast as possible, open a zip and read a specific file. The better libraries
+only worked on node, I needed a browser based solution for Electron.
 
 Note that to repo the behavior of most unzip libs would just be
 
@@ -44,6 +45,35 @@ async function readFiles(url) {
   }
 }
 ```
+
+One other thing is that many libraries seem bloated. IMO the smaller the API the better.
+I don't need a library to try to do 50 things via options and configuration. Rather I need
+a library to handle the main task and make it possible to do the rest outside the library.
+This makes a library far far more flexible.
+
+As an example some libraries provide no raw data for filenames. Apparently many zip files
+have non-utf8 filenames in them. The solution for this library is to do that on your own.
+
+Example
+
+    const {zip, entries} = await unzipit.open(url);
+    // decode names as big5 (chinese)
+    const decoder = new TextDecoder('big5');
+    entries.forEach(entry => {
+      entry.name = decoder.decode(entry.nameBytes);
+    });
+    
+So much easier than passing in functions or decode names or setting flags whether or not to decode them.
+
+Same thing with filenames. If you care about slashes or backslashes do that yourself outside the library
+
+    const {zip, entries} = await unzipit.open(url);
+    // change slashes and backslashes into -
+    entries.forEach(entry => {
+      entry.name = name.replace(/\\|\//g, '-');
+    });
+
+Finally this library is ES7 based.
 
 ## API
 
@@ -61,10 +91,10 @@ class Zip {
 
 ```js
 class ZipEntry {
-  blob()   // returns a promise that returns a Blob for this entry
-  arrayBuffer() // returns a promise that returns an ArrayBuffer for this entry
-  text() // returns text, assumes the text is valid utf8. If you want more options decode arrayBuffer yourself
-  json() // returns text with JSON.parse called on it. If you want more options decode arrayBuffer yourself
+  async blob(type)   // returns a Blob for this entry (optional type as in 'image/jpeg'
+  async arrayBuffer() // returns an ArrayBuffer for this entry
+  async text() // returns text, assumes the text is valid utf8. If you want more options decode arrayBuffer yourself
+  async json() // returns text with JSON.parse called on it. If you want more options decode arrayBuffer yourself
   name,        // name of entry
   nameBytes,   // raw name of entry (see notes)
   size,    // size in bytes
@@ -99,6 +129,10 @@ have to adapt on your own.
 The zip standard predates unicode so it's possible and apparently not uncommon for files
 to have non-unicode names. `entry.nameBytes` contains the raw bytes of the filename.
 so you are free to decode the name using your own methods.
+
+## Acknowledgements
+
+The code is **heavily** based on [yazul](https://github.com/thejoshwolfe/yauzl)
 
 ## Licence
 
