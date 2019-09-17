@@ -1,7 +1,7 @@
 export default class ArrayBufferReader {
   constructor(arrayBufferOrView) {
     this.buffer = arrayBufferOrView instanceof ArrayBuffer
-       ? arrayBufferOfView
+       ? arrayBufferOrView
        : arrayBufferOrView.buffer;
   }
   get length() {

@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8">
-    <title>Mocha</title>
+    <title>Unzipit Tests</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="mocha.css">
   </head>
@@ -22,9 +22,14 @@
     </script>
     <script src="../node_modules/chai/chai.js"></script>
     <script src="mocha.js"></script>
-    <script>mocha.setup('bdd');</script>
+    <script>
+    mocha.setup('bdd');
+    mocha.enableTimeouts(false); console.log('fixme');
+    </script>
     <script type="module">
       import './tests/ArrayBufferReader-test.js';
+      import './tests/BlobReader-test.js';
+      import './tests/unzipit-test.js';
 
       const settings = Object.fromEntries(new URLSearchParams(window.location.search).entries());
       if (settings.reporter) {

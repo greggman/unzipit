@@ -42,22 +42,20 @@ async function readFiles(url) {
   for (const entry in entries) {
     const data = await entry.arrayBuffer();
   }
-
-  zip.close();
 }
 ```
 
 ## API
 
 ```js
-unzipit.open(url/blob/arraybuffer/reader)
+const {zip, entries} = await unzipit.open(url/blob/arraybuffer/reader)
+// note: If you need more options for your url then fetch your own blob and pass the blob in
 ```
 
 ```js
 class Zip {
-  close()   // free resources
   comment,  // the comment for the zip file
-  commentBytes:  // the raw data for comment, see nameBytes
+  commentBytes,  // the raw data for comment, see nameBytes
 }
 ```
 
@@ -70,7 +68,7 @@ class ZipEntry {
   name,        // name of entry
   nameBytes,   // raw name of entry (see notes)
   size,    // size in bytes
-  compressedSize: // size before decompressing
+  compressedSize, // size before decompressing
   comment,  // the comment for this entry
   commentBytes, // the raw comment for this entry
 }
