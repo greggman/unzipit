@@ -8,7 +8,7 @@ Random access unzip library for browser based JavaScript
 import unzipit from 'unzipit';
 
 async function readFiles(url) {
-  const {zip, entries} = await unzipit.openURL(url);
+  const {zip, entries} = await unzipit(url);
 
   // print all entries an their sizes
   for (const entry in entries) {
@@ -18,15 +18,12 @@ async function readFiles(url) {
   // read the 4th entry as an arraybuffer
   const arrayBuffer = await entries[3].arrayBuffer();
 
-  // read the 9th entry as a blob
-  const blob = await entries[8].blob({type: 'image/png'});
-
-  // close the zip so resources can be freed
-  zip.close();
+  // read the 9th entry as a blob and tag it with mime type 'image/png'
+  const blob = await entries[8].blob('image/png');
 }
 ```
 
-You can also pass a Blob, ArrayBuffer, or TypedArray
+You can also pass a Blob, ArrayBuffer, TypedArray, or your own Reader
 
 ## Why?
 
@@ -38,8 +35,10 @@ only worked on node, I needed a browser based solution for Electron.
 Note that to repo the behavior of most unzip libs would just be
 
 ```js
+import unzipit from 'unzipit';
+
 async function readFiles(url) {
-  const {zip, entries} = await unzipit.open(url);
+  const {zip, entries} = await unzipit(url);
   for (const entry in entries) {
     const data = await entry.arrayBuffer();
   }
@@ -56,7 +55,7 @@ have non-utf8 filenames in them. The solution for this library is to do that on 
 
 Example
 
-    const {zip, entries} = await unzipit.open(url);
+    const {zip, entries} = await unzipit(url);
     // decode names as big5 (chinese)
     const decoder = new TextDecoder('big5');
     entries.forEach(entry => {
@@ -67,7 +66,7 @@ So much easier than passing in functions or decode names or setting flags whethe
 
 Same thing with filenames. If you care about slashes or backslashes do that yourself outside the library
 
-    const {zip, entries} = await unzipit.open(url);
+    const {zip, entries} = await unzipit(url);
     // change slashes and backslashes into -
     entries.forEach(entry => {
       entry.name = name.replace(/\\|\//g, '-');
@@ -78,7 +77,7 @@ Finally this library is ES7 based.
 ## API
 
 ```js
-const {zip, entries} = await unzipit.open(url/blob/arraybuffer/reader)
+const {zip, entries} = await unzipit(url/blob/arraybuffer/reader)
 // note: If you need more options for your url then fetch your own blob and pass the blob in
 ```
 
@@ -122,7 +121,40 @@ read that way but are perfectly valid zip files.
 If your server had some kind of API that lets you randomly access parts of a file
 then it would theoretically be possible. Unfortunately AFAIK there are no web standards
 for remote random access file reading (WEBDAV?) so whatever proprietary protocol you use you'd
-have to adapt on your own.
+have to adapt on your own. To do this you'd make your own `Reader`. It just needs to support
+a `length` property and a `read(offset, size)` method. You can imagine an class like
+
+```
+class NetworkReader {
+  constructor(url) {
+    this.url = url;
+  }
+  async init() {
+    const req = await fetch(`${url}?cmd=length`);
+    this.length = await req.json();
+  }
+  async read(offset, size) {
+    const req = await fetch(`${url}?offset=${offset}&size=${size}`);
+    const buffer = await req.arrayBuffer();
+    return buffer;
+  }
+}
+```
+
+To use it you'd do something like
+
+```
+import unzipit from 'unzipit';
+
+async function readFiles(url) {
+  const reader = new NetworkReader(url);
+  await reader.init();
+  const {zip, entries} = await unzipit(reader);
+  for (const entry in entries) {
+    const data = await entry.arrayBuffer();
+  }
+}
+``` 
 
 ### Non UTF-8 Filenames
 
