@@ -1,5 +1,8 @@
 import ArrayBufferReader from './ArrayBufferReader.js';
 import BlobReader from './BlobReader.js';
+//import { unzip } from 'zlib';
+
+/* global UZIP, pako */
 /*
 class Zip {
   constructor(reader) {
@@ -8,6 +11,19 @@ class Zip {
   }
 }
 */
+
+function dosDateTimeToDate(date, time) {
+  const day = date & 0x1f; // 1-31
+  const month = (date >> 5 & 0xf) - 1; // 1-12, 0-11
+  const year = (date >> 9 & 0x7f) + 1980; // 0-128, 1980-2108
+
+  const millisecond = 0;
+  const second = (time & 0x1f) * 2; // 0-29, 0-58 (even numbers)
+  const minute = time >> 5 & 0x3f; // 0-59
+  const hour = time >> 11 & 0x1f; // 0-23
+
+  return new Date(year, month, day, hour, minute, second, millisecond);
+}
 
 class ZipEntry {
   constructor(reader, entry) {
@@ -19,6 +35,8 @@ class ZipEntry {
     this.compressedSize = entry.compressedSize;
     this.comment = entry.comment;
     this.commentBytes = entry.commentBytes;
+    this.lastModDate = dosDateTimeToDate(entry.lastModFileDate, entry.lastModFileTime);
+    this.isDirectory = !!(entry.externalFileAttributes & 0x10);
   }
   // returns a promise that returns a Blob for this entry
   async blob(type = '') {
@@ -27,6 +45,7 @@ class ZipEntry {
   }
   // returns a promise that returns an ArrayBuffer for this entry
   async arrayBuffer() {
+    return await readEntryData(this._reader, this._entry);
   }
   // returns text, assumes the text is valid utf8. If you want more options decode arrayBuffer yourself
   async text() {
@@ -72,12 +91,21 @@ function getUint64LE(uint8View, offset) {
          getUint32LE(uint8View, offset + 4) * 0x100000000;
 }
 
+
+const decodeCP437 = (function() {
+  const cp437 = '\u0000☺☻♥♦♣♠•◘○◙♂♀♪♫☼►◄↕‼¶§▬↨↑↓→←∟↔▲▼ !"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~⌂ÇüéâäàåçêëèïîìÄÅÉæÆôöòûùÿÖÜ¢£¥₧ƒáíóúñÑªº¿⌐¬½¼¡«»░▒▓│┤╡╢╖╕╣║╗╝╜╛┐└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀αßΓπΣσµτΦΘΩδ∞φε∩≡±≥≤⌠⌡÷≈°∙·√ⁿ²■ ';
+
+  return function(uint8view) {
+    return uint8view.map(v => cp437[v]).join('');
+  };
+}());
+
 const utf8Decoder = new TextDecoder();
-const cp437Decoder = new TextDecoder(); console.log('fixme'); //new TextDecoder('cp437');
 function decodeBuffer(uint8View, isUTF8) {
+  return utf8Decoder.decode(uint8View);  
   return isUTF8
       ? utf8Decoder.decode(uint8View)
-      : cp437Decoder.decode(uint8View);
+      : decodeCP437(uint8View);
 }
 
 async function findEndOfCentralDirector(reader) {
@@ -324,6 +352,61 @@ async function readEntries(reader, centralDirectoryOffset, entryCount, comment, 
     zip,
     entries: entries.map(e => new ZipEntry(reader, e)),
   };
+}
+
+async function readEntryData(reader, entry) {
+  const buffer = await readAs(reader, entry.relativeOffsetOfLocalHeader, 30);
+
+  // 0 - Local file header signature = 0x04034b50
+  const signature = getUint32LE(buffer, 0);
+  if (signature !== 0x04034b50) {
+    throw new Error(`invalid local file header signature: 0x${signature.toString(16)}`);
+  }
+
+  // all this should be redundant
+  // 4 - Version needed to extract (minimum)
+  // 6 - General purpose bit flag
+  // 8 - Compression method
+  // 10 - File last modification time
+  // 12 - File last modification date
+  // 14 - CRC-32
+  // 18 - Compressed size
+  // 22 - Uncompressed size
+  // 26 - File name length (n)
+  const fileNameLength = getUint16LE(buffer, 26);
+  // 28 - Extra field length (m)
+  const extraFieldLength = getUint16LE(buffer, 28);
+  // 30 - File name
+  // 30+n - Extra field
+  const localFileHeaderEnd = entry.relativeOffsetOfLocalHeader + buffer.length + fileNameLength + extraFieldLength;
+  let decompress;
+  if (entry.compressionMethod === 0) {
+    // 0 - The file is stored (no compression)
+    decompress = false;
+  } else if (entry.compressionMethod === 8) {
+    // 8 - The file is Deflated
+    decompress = true;
+  } else {
+    throw new Error(`unsupported compression method: ${entry.compressionMethod}`);
+  }
+  const fileDataStart = localFileHeaderEnd;
+  const fileDataEnd = fileDataStart + entry.compressedSize;
+  if (entry.compressedSize !== 0) {
+    // bounds check now, because the read streams will probably not complain loud enough.
+    // since we're dealing with an unsigned offset plus an unsigned size,
+    // we only have 1 thing to check for.
+    if (fileDataEnd > reader.length) {
+      throw new Error(`file data overflows file bounds: ${fileDataStart} +  ${entry.compressedSize}  > ${reader.length}`);
+    }
+  }
+  const data = await readAs(reader, fileDataStart, entry.compressedSize);
+  if (!decompress) {
+    return data;
+  }
+
+  const dst = new Uint8Array(entry.uncompressedSize);
+  UZIP.inflateRaw(data, dst);
+  return dst;
 }
 
 

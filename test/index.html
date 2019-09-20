@@ -25,7 +25,10 @@
     <script>
     mocha.setup('bdd');
     mocha.enableTimeouts(false); console.log('fixme');
+    mocha.fullTrace();
     </script>
+<script src="../UZIP.js"></script>
+<script src="../pako_inflate.js"></script>
     <script type="module">
       import './tests/ArrayBufferReader-test.js';
       import './tests/BlobReader-test.js';
