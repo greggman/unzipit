@@ -40,7 +40,9 @@ import unzipit from 'unzipit';
 async function readFiles(url) {
   const {zip, entries} = await unzipit(url);
   for (const entry in entries) {
-    const data = await entry.arrayBuffer();
+    if (!entry.isDirectory) {
+      const data = await entry.arrayBuffer();
+    }
   }
 }
 ```
@@ -62,7 +64,7 @@ Example
       entry.name = decoder.decode(entry.nameBytes);
     });
     
-So much easier than passing in functions or decode names or setting flags whether or not to decode them.
+So much easier than passing in functions to decode names or setting flags whether or not to decode them.
 
 Same thing with filenames. If you care about slashes or backslashes do that yourself outside the library
 
@@ -72,7 +74,19 @@ Same thing with filenames. If you care about slashes or backslashes do that your
       entry.name = name.replace(/\\|\//g, '-');
     });
 
+Some libraries both zip and unzip.
+IMO those should be separate libraries as there is ZERO code to share between
+both. Plenty of projects only need to do one or the other.
+
+Similarly inflate and deflate libraries should be separate from zip, unzip libraries.
+You need one or the other not both. See zlib as an example.
+
 Finally this library is ES7 based.
+
+One area I'm not sure about is worker support. I want this code to be able
+to deflate in a worker but the question is at what level should that happen.
+Should I wrap an inflate library in a worker interface an use it here?
+Or should I make the user wrap this library at a higher level?
 
 ## API
 
@@ -100,6 +114,8 @@ class ZipEntry {
   compressedSize, // size before decompressing
   comment,  // the comment for this entry
   commentBytes, // the raw comment for this entry
+  lastModDate, // a Date
+  isDirectory,
 }
 ```
 
