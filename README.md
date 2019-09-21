@@ -57,22 +57,26 @@ have non-utf8 filenames in them. The solution for this library is to do that on 
 
 Example
 
-    const {zip, entries} = await unzipit(url);
-    // decode names as big5 (chinese)
-    const decoder = new TextDecoder('big5');
-    entries.forEach(entry => {
-      entry.name = decoder.decode(entry.nameBytes);
-    });
+```js
+const {zip, entries} = await unzipit(url);
+// decode names as big5 (chinese)
+const decoder = new TextDecoder('big5');
+entries.forEach(entry => {
+  entry.name = decoder.decode(entry.nameBytes);
+});
+```
     
 So much easier than passing in functions to decode names or setting flags whether or not to decode them.
 
 Same thing with filenames. If you care about slashes or backslashes do that yourself outside the library
 
-    const {zip, entries} = await unzipit(url);
-    // change slashes and backslashes into -
-    entries.forEach(entry => {
-      entry.name = name.replace(/\\|\//g, '-');
-    });
+```js
+const {zip, entries} = await unzipit(url);
+// change slashes and backslashes into -
+entries.forEach(entry => {
+  entry.name = name.replace(/\\|\//g, '-');
+});
+```
 
 Some libraries both zip and unzip.
 IMO those should be separate libraries as there is ZERO code to share between
@@ -134,23 +138,28 @@ where you can cheat and read the local headers of each file but that is an inval
 way to read a zip file and it's trivial to create zip files that will fail when
 read that way but are perfectly valid zip files.
 
-If your server had some kind of API that lets you randomly access parts of a file
-then it would theoretically be possible. Unfortunately AFAIK there are no web standards
-for remote random access file reading (WEBDAV?) so whatever proprietary protocol you use you'd
-have to adapt on your own. To do this you'd make your own `Reader`. It just needs to support
-a `length` property and a `read(offset, size)` method. You can imagine an class like
+If your server supports http range requests you could maybe do something like this.
 
-```
-class NetworkReader {
+```js
+// PS: un tested!
+class HTTPRangeReader {
   constructor(url) {
     this.url = url;
   }
   async init() {
-    const req = await fetch(`${url}?cmd=length`);
-    this.length = await req.json();
+    const req = await fetch(this.url, { method: 'HEAD' });
+    const headers = Object.fromEntries(req.headers.entries());
+    this.length = parseInt(headers['content-length']);
+    if (Number.isNaN(this.length)) {
+      throw Error('could not get length');
+    }
   }
   async read(offset, size) {
-    const req = await fetch(`${url}?offset=${offset}&size=${size}`);
+    const req = await fetch(this.url, {
+      headers: {
+        Range: `bytes=${offset}-${offset + size - 1}`,
+      },
+    });
     const buffer = await req.arrayBuffer();
     return buffer;
   }
@@ -159,7 +168,7 @@ class NetworkReader {
 
 To use it you'd do something like
 
-```
+```js
 import unzipit from 'unzipit';
 
 async function readFiles(url) {
@@ -171,6 +180,17 @@ async function readFiles(url) {
   }
 }
 ``` 
+
+### Special headers and options for network requests
+
+The library takes a URL but there are no options for cors, or credentials etc. 
+If you need that pass in a blob.
+
+```js
+const req = await fetch(url, { mode: cors });
+const blob = await req.blob();
+const {entries} = await unzipit(blob);
+```
 
 ### Non UTF-8 Filenames
 
