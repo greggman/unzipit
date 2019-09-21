@@ -2,16 +2,16 @@
   "name": "unzipit.js",
   "version": "0.0.1",
   "description": "random access unzip library for JavaScript",
-  "main": "dist/index.js",
-  "module": "src/index.js",
+  "main": "dist/unzipit.js",
+  "module": "dist/unzipit.module.js",
   "scripts": {
+    "build": "rollup -c",
     "test": "node test/puppeteer.notjs"
   },
   "files": [
-    "src/**",
     "dist/**"
   ],
-  "keywords": [],
+  "keywords": ["zip", "unzip"],
   "author": "",
   "license": "MIT",
   "devDependencies": {
@@ -22,6 +22,11 @@
     "eslint-plugin-require-trailing-comma": "0.0.1",
     "express": "^4.17.1",
     "mocha": "^6.2.0",
-    "puppeteer": "^1.19.0"
+    "puppeteer": "^1.19.0",
+    "rollup": "^1.21.4",
+    "rollup-plugin-node-resolve": "^5.2.0"
+  },
+  "dependencies": {
+    "uzip-module": "^1.0.1"
   }
 }
