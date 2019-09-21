@@ -10,10 +10,7 @@ describe('unzipit', function() {
 
       assert.typeOf(zip.comment, 'string');
       assert.instanceOf(zip.commentBytes, Uint8Array);
-
-      for (const entry of entries) {
-        console.log(entry.name, entry);
-      }
+      assert.equal(entries.length, 6);
     });
 
     it('entries are correct', async() => {
