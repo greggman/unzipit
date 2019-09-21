@@ -1,6 +1,6 @@
 {
   "name": "unzipit.js",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "random access unzip library for JavaScript",
   "main": "dist/unzipit.js",
   "module": "dist/unzipit.module.js",
@@ -11,7 +11,10 @@
   "files": [
     "dist/**"
   ],
-  "keywords": ["zip", "unzip"],
+  "keywords": [
+    "zip",
+    "unzip"
+  ],
   "author": "",
   "license": "MIT",
   "devDependencies": {
