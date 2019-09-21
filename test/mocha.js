@@ -1,6 +1,6 @@
 (function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c="function"==typeof require&&require;if(!f&&c)return c(i,!0);if(u)return u(i,!0);var a=new Error("Cannot find module '"+i+"'");throw a.code="MODULE_NOT_FOUND",a}var p=n[i]={exports:{}};e[i][0].call(p.exports,function(r){var n=e[i][1][r];return o(n||r)},p,p.exports,r,e,n,t)}return n[i].exports}for(var u="function"==typeof require&&require,i=0;i<t.length;i++)o(t[i]);return o}return r})()({1:[function(require,module,exports){
-(function (process,global){
-'use strict';
+(function(process, global){
+'use strict';  // eslint-disble-line
 
 /* eslint no-unused-vars: off */
 /* eslint-env commonjs */
@@ -11,7 +11,7 @@
 
 process.stdout = require('browser-stdout')({label: false});
 
-var Mocha = require('./lib/mocha');
+const Mocha = require('./lib/mocha');
 
 /**
  * Create a Mocha instance.
@@ -19,21 +19,21 @@ var Mocha = require('./lib/mocha');
  * @return {undefined}
  */
 
-var mocha = new Mocha({reporter: 'html'});
+const mocha = new Mocha({reporter: 'html'});
 
 /**
  * Save timer references to avoid Sinon interfering (see GH-237).
  */
 
-var Date = global.Date;
-var setTimeout = global.setTimeout;
-var setInterval = global.setInterval;
-var clearTimeout = global.clearTimeout;
-var clearInterval = global.clearInterval;
+const Date = global.Date;
+const setTimeout = global.setTimeout;
+const setInterval = global.setInterval;
+const clearTimeout = global.clearTimeout;
+const clearInterval = global.clearInterval;
 
-var uncaughtExceptionHandlers = [];
+const uncaughtExceptionHandlers = [];
 
-var originalOnerrorHandler = global.onerror;
+const originalOnerrorHandler = global.onerror;
 
 /**
  * Remove uncaughtException listener.
@@ -47,7 +47,7 @@ process.removeListener = function(e, fn) {
     } else {
       global.onerror = function() {};
     }
-    var i = uncaughtExceptionHandlers.indexOf(fn);
+    const i = uncaughtExceptionHandlers.indexOf(fn);
     if (i !== -1) {
       uncaughtExceptionHandlers.splice(i, 1);
     }
@@ -73,8 +73,8 @@ process.on = function(e, fn) {
 // Ensure that this default UI does not expose its methods to the global scope.
 mocha.suite.removeAllListeners('pre-require');
 
-var immediateQueue = [];
-var immediateTimeout;
+const immediateQueue = [];
+let immediateTimeout;
 
 function timeslice() {
   var immediateStart = new Date().getTime();
@@ -130,7 +130,7 @@ mocha.setup = function(opts) {
   if (typeof opts === 'string') {
     opts = {ui: opts};
   }
-  for (var opt in opts) {
+  for (let opt in opts) {
     if (opts.hasOwnProperty(opt)) {
       this[opt](opts[opt]);
     }
@@ -143,10 +143,10 @@ mocha.setup = function(opts) {
  */
 
 mocha.run = function(fn) {
-  var options = mocha.options;
+  const options = mocha.options;
   mocha.globals('location');
 
-  var query = Mocha.utils.parseQuery(global.location.search || '');
+  const query = Mocha.utils.parseQuery(global.location.search || '');
   if (query.grep) {
     mocha.grep(query.grep);
   }
@@ -159,7 +159,7 @@ mocha.run = function(fn) {
 
   return Mocha.prototype.run.call(mocha, function(err) {
     // The DOM Document is not available in Web Workers.
-    var document = global.document;
+    const document = global.document;
     if (
       document &&
       document.getElementById('mocha') &&
