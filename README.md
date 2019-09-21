@@ -178,6 +178,17 @@ The zip standard predates unicode so it's possible and apparently not uncommon f
 to have non-unicode names. `entry.nameBytes` contains the raw bytes of the filename.
 so you are free to decode the name using your own methods.
 
+## Testing
+
+When writing tests serve the folder with your favorite web server (recommend [`http-server`](https://www.npmjs.com/package/http-server))
+then go to `http://localhost:8080/test/` to easily re-run the tests.
+
+Of course you can also `npm test` to run them from the command line.
+
+### Debugging 
+
+Follow the instructions on testing but add  `?timeout=0` to the URL as in `http://localhost:8080/tests/?timeout=0`
+
 ## Acknowledgements
 
 The code is **heavily** based on [yazul](https://github.com/thejoshwolfe/yauzl)
