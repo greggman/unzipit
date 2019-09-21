@@ -1,8 +1,7 @@
 import ArrayBufferReader from './ArrayBufferReader.js';
 import BlobReader from './BlobReader.js';
-//import { unzip } from 'zlib';
+import {inflateRaw} from 'uzip-module';
 
-/* global UZIP, pako */
 /*
 class Zip {
   constructor(reader) {
@@ -405,7 +404,7 @@ async function readEntryData(reader, entry) {
   }
 
   const dst = new Uint8Array(entry.uncompressedSize);
-  UZIP.inflateRaw(data, dst);
+  inflateRaw(data, dst);
   return dst;
 }
 
