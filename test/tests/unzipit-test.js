@@ -39,6 +39,7 @@ describe('unzipit', function() {
       }
     });
 
+    /*
     it('works with zip64', async() => {
       const hashes = {
         'wavpack.zip': '55e5eef2d50d8adaa8235d4c7c386042d43a1458f952ef22bc992e50ca16579b',
@@ -84,5 +85,6 @@ describe('unzipit', function() {
         }
       }
     });
+    */
   });
 });
