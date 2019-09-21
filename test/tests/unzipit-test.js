@@ -1,7 +1,7 @@
 /* global chai, describe, it */
 const assert = chai.assert;
 
-import open from '../../src/unzipit.js';
+import open from '../../dist/unzipit.module.js';
 
 describe('unzipit', function() {
   describe('url', function() {
