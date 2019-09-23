@@ -90,21 +90,26 @@ function getUint64LE(uint8View, offset) {
          getUint32LE(uint8View, offset + 4) * 0x100000000;
 }
 
-
+/*
 const decodeCP437 = (function() {
   const cp437 = '\u0000☺☻♥♦♣♠•◘○◙♂♀♪♫☼►◄↕‼¶§▬↨↑↓→←∟↔▲▼ !"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~⌂ÇüéâäàåçêëèïîìÄÅÉæÆôöòûùÿÖÜ¢£¥₧ƒáíóúñÑªº¿⌐¬½¼¡«»░▒▓│┤╡╢╖╕╣║╗╝╜╛┐└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀αßΓπΣσµτΦΘΩδ∞φε∩≡±≥≤⌠⌡÷≈°∙·√ⁿ²■ ';
 
   return function(uint8view) {
-    return uint8view.map(v => cp437[v]).join('');
+    return Array.from(uint8view).map(v => cp437[v]).join('');
   };
 }());
+*/
 
 const utf8Decoder = new TextDecoder();
 function decodeBuffer(uint8View, isUTF8) {
   return utf8Decoder.decode(uint8View);  
+  /*
+  AFAICT the UTF8 flat is not set so it's 100% up to the user
+  to self decode if their file is not utf8 filenames
   return isUTF8
       ? utf8Decoder.decode(uint8View)
       : decodeCP437(uint8View);
+  */
 }
 
 async function findEndOfCentralDirector(reader, totalLength) {
@@ -274,7 +279,7 @@ async function readEntries(reader, centralDirectoryOffset, entryCount, comment, 
 
     // 46+n+m - File comment
     entry.commentBytes = data.slice(fileCommentStart, fileCommentStart + entry.fileCommentLength);
-    entry.comment = decodeBuffer(entry.commentBytes, isUtf8);
+    entry.comment = decodeBuffer(entry.commentBytes, isUTF8);
 
     readEntryCursor += data.length;
 
