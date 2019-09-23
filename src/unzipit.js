@@ -419,7 +419,7 @@ async function readEntryData(reader, entry) {
 
 export default async function open(source) {
   let reader;
-  if (source instanceof Blob) {
+  if (typeof Blob !== 'undefined' && source instanceof Blob) {
     reader = new BlobReader(source);
   } else if (source instanceof ArrayBuffer || (source && source.buffer && source.buffer instanceof ArrayBuffer)) {
     reader = new ArrayBufferReader(source);
