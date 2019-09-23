@@ -1,3 +1,4 @@
+/* unzipit@0.0.3, license MIT */
 (function (global, factory) {
   typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = factory() :
   typeof define === 'function' && define.amd ? define(factory) :
@@ -10,7 +11,7 @@
          ? arrayBufferOrView
          : arrayBufferOrView.buffer;
     }
-    get length() {
+    async getLength() {
       return this.buffer.byteLength;
     }
     async read(offset, length) {
@@ -33,7 +34,7 @@
     constructor(blob) {
       this.blob = blob;
     }
-    get length() {
+    async getLength() {
       return this.blob.size;
     }
     async read(offset, length, ) {
@@ -642,7 +643,7 @@
       this.comment = entry.comment;
       this.commentBytes = entry.commentBytes;
       this.lastModDate = dosDateTimeToDate(entry.lastModFileDate, entry.lastModFileTime);
-      this.isDirectory = !!(entry.externalFileAttributes & 0x10);
+      this.isDirectory = entry.uncompressedSize === 0 && entry.name.endsWith('/');
     }
     // returns a promise that returns a Blob for this entry
     async blob(type = '') {
@@ -656,7 +657,7 @@
     // returns text, assumes the text is valid utf8. If you want more options decode arrayBuffer yourself
     async text() {
       const buffer = await this.arrayBuffer();
-      return decodeBuffer(new Uint8Array(buffer), true);
+      return decodeBuffer(new Uint8Array(buffer));
     }
     // returns text with JSON.parse called on it. If you want more options decode arrayBuffer yourself
     async json() {
@@ -697,26 +698,31 @@
            getUint32LE(uint8View, offset + 4) * 0x100000000;
   }
 
-
+  /*
   const decodeCP437 = (function() {
     const cp437 = '\u0000☺☻♥♦♣♠•◘○◙♂♀♪♫☼►◄↕‼¶§▬↨↑↓→←∟↔▲▼ !"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~⌂ÇüéâäàåçêëèïîìÄÅÉæÆôöòûùÿÖÜ¢£¥₧ƒáíóúñÑªº¿⌐¬½¼¡«»░▒▓│┤╡╢╖╕╣║╗╝╜╛┐└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀αßΓπΣσµτΦΘΩδ∞φε∩≡±≥≤⌠⌡÷≈°∙·√ⁿ²■ ';
 
     return function(uint8view) {
-      return uint8view.map(v => cp437[v]).join('');
+      return Array.from(uint8view).map(v => cp437[v]).join('');
     };
   }());
+  */
 
   const utf8Decoder = new TextDecoder();
   function decodeBuffer(uint8View, isUTF8) {
     return utf8Decoder.decode(uint8View);  
+    /*
+    AFAICT the UTF8 flat is not set so it's 100% up to the user
+    to self decode if their file is not utf8 filenames
     return isUTF8
         ? utf8Decoder.decode(uint8View)
         : decodeCP437(uint8View);
+    */
   }
 
-  async function findEndOfCentralDirector(reader) {
-    const size = Math.min(EOCDR_WITHOUT_COMMENT_SIZE + MAX_COMMENT_SIZE, reader.length);
-    const readStart = reader.length - size;
+  async function findEndOfCentralDirector(reader, totalLength) {
+    const size = Math.min(EOCDR_WITHOUT_COMMENT_SIZE + MAX_COMMENT_SIZE, totalLength);
+    const readStart = totalLength - size;
     const data = await readAs(reader, readStart, size);
     for (let i = size - EOCDR_WITHOUT_COMMENT_SIZE; i >= 0; --i) {
       if (getUint32LE(data, i) !== EOCDR_SIGNATURE) {
@@ -853,11 +859,8 @@
       readEntryCursor += 46;
 
       const data = await readAs(reader, readEntryCursor, entry.fileNameLength + entry.extraFieldLength + entry.fileCommentLength);
-
-      // 46 - File name
-      const isUtf8 = (entry.generalPurposeBitFlag & 0x800) !== 0;
       entry.nameBytes = data.slice(0, entry.fileNameLength);
-      entry.name = decodeBuffer(entry.nameBytes, isUtf8);
+      entry.name = decodeBuffer(entry.nameBytes);
 
       // 46+n - Extra field
       const fileCommentStart = entry.fileNameLength + entry.extraFieldLength;
@@ -881,7 +884,7 @@
 
       // 46+n+m - File comment
       entry.commentBytes = data.slice(fileCommentStart, fileCommentStart + entry.fileCommentLength);
-      entry.comment = decodeBuffer(entry.commentBytes, isUtf8);
+      entry.comment = decodeBuffer(entry.commentBytes);
 
       readEntryCursor += data.length;
 
@@ -934,7 +937,7 @@
                                                               // > ignored and the File Name field in the header should be used instead.
       if (nameField) {
           // UnicodeName   Variable    UTF-8 version of the entry File Name
-          entry.fileName = decodeBuffer(nameField.data.slice(5), true);
+          entry.fileName = decodeBuffer(nameField.data.slice(5));
       }
 
       // validate file size
@@ -962,6 +965,9 @@
 
   async function readEntryData(reader, entry) {
     const buffer = await readAs(reader, entry.relativeOffsetOfLocalHeader, 30);
+    // note: maybe this should be passed in or cached on entry
+    // as it's async so there will be at least one tick (not sure about that)
+    const totalLength = await reader.getLength();
 
     // 0 - Local file header signature = 0x04034b50
     const signature = getUint32LE(buffer, 0);
@@ -1001,8 +1007,8 @@
       // bounds check now, because the read streams will probably not complain loud enough.
       // since we're dealing with an unsigned offset plus an unsigned size,
       // we only have 1 thing to check for.
-      if (fileDataEnd > reader.length) {
-        throw new Error(`file data overflows file bounds: ${fileDataStart} +  ${entry.compressedSize}  > ${reader.length}`);
+      if (fileDataEnd > totalLength) {
+        throw new Error(`file data overflows file bounds: ${fileDataStart} +  ${entry.compressedSize}  > ${totalLength}`);
       }
     }
     const data = await readAs(reader, fileDataStart, entry.compressedSize);
@@ -1032,11 +1038,13 @@
       throw new Error('unsupported source type');
     }
 
-    if (reader.length > Number.MAX_SAFE_INTEGER) {
-      throw new Error(`file too large. size: ${reader.length}. Only file sizes up 4503599627370496 bytes are supported`);
+    const totalLength = await reader.getLength();
+
+    if (totalLength > Number.MAX_SAFE_INTEGER) {
+      throw new Error(`file too large. size: ${totalLength}. Only file sizes up 4503599627370496 bytes are supported`);
     }
 
-    return await findEndOfCentralDirector(reader);
+    return await findEndOfCentralDirector(reader, totalLength);
   }
 
   return open;
