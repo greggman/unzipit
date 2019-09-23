@@ -177,7 +177,7 @@ entries.forEach(entry => {
 ```
 
 Some libraries both zip and unzip.
-IMO those should be separate libraries as there is ZERO code to share between
+IMO those should be separate libraries as there is little if any code to share between
 both. Plenty of projects only need to do one or the other.
 
 Similarly inflate and deflate libraries should be separate from zip, unzip libraries.
@@ -189,6 +189,19 @@ One area I'm not sure about is worker support. I want this code to be able
 to deflate in a worker but the question is at what level should that happen.
 Should I wrap an inflate library in a worker interface an use it here?
 Or should I make the user wrap this library at a higher level?
+
+Advantages over other libraries. 
+
+* JSZIP requires the entire compressed file in memory. 
+  It also requires reading through all entries in order. 
+
+* UZIP requires the entire compressed file to be in memory and 
+  the entire uncompressed contents of all the files to be in memory.
+  
+* Yauzl does not require all the files to be in memory but
+  they do have to be read in order and it has very peculiar API where 
+  you still have to manually go through all the entries even if
+  you don't choose to read their contents. Further it's node only.
 
 ## API
 
@@ -298,6 +311,16 @@ The zip standard predates unicode so it's possible and apparently not uncommon f
 to have non-unicode names. `entry.nameBytes` contains the raw bytes of the filename.
 so you are free to decode the name using your own methods.
 
+### An Object instead of an array
+
+`entries` in all the examples above is an array. To turn it into an object of entries
+by filename in 1 line
+
+```js
+const {entries} = await unzipit(blob);
+const files = Object.fromEntries(entries.map(e => [e.name, e])); 
+```
+
 ## Testing
 
 When writing tests serve the folder with your favorite web server (recommend [`http-server`](https://www.npmjs.com/package/http-server))
@@ -311,7 +334,7 @@ Follow the instructions on testing but add  `?timeout=0` to the URL as in `http:
 
 ## Acknowledgements
 
-The code is **heavily** based on [yazul](https://github.com/thejoshwolfe/yauzl)
+The code is **heavily** based on [yauzl](https://github.com/thejoshwolfe/yauzl)
 
 ## Licence
 
