@@ -1,5 +1,5 @@
 {
-  "name": "unzipit.js",
+  "name": "unzipit",
   "version": "0.0.2",
   "description": "random access unzip library for JavaScript",
   "main": "dist/unzipit.js",
@@ -15,8 +15,16 @@
     "zip",
     "unzip"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/greggman/unzipit.git"
+  },
   "author": "",
   "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/greggman/unzipit/issues"
+  },
+  "homepage": "https://github.com/greggman/unzipit#readme",
   "devDependencies": {
     "chai": "^4.2.0",
     "eslint": "^6.0.1",
@@ -25,7 +33,7 @@
     "eslint-plugin-require-trailing-comma": "0.0.1",
     "express": "^4.17.1",
     "mocha": "^6.2.0",
-    "puppeteer": "^1.19.0",
+    "puppeteer": "^1.20.0",
     "rollup": "^1.21.4",
     "rollup-plugin-node-resolve": "^5.2.0"
   },
