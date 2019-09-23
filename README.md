@@ -141,17 +141,19 @@ read that way but are perfectly valid zip files.
 If your server supports http range requests you could maybe do something like this.
 
 ```js
-// PS: un tested!
+// PS: un-tested!
 class HTTPRangeReader {
   constructor(url) {
     this.url = url;
   }
-  async init() {
-    const req = await fetch(this.url, { method: 'HEAD' });
-    const headers = Object.fromEntries(req.headers.entries());
-    this.length = parseInt(headers['content-length']);
-    if (Number.isNaN(this.length)) {
-      throw Error('could not get length');
+  async getLength() {
+    if (this.length === undefined) {
+      const req = await fetch(this.url, { method: 'HEAD' });
+      const headers = Object.fromEntries(req.headers.entries());
+      this.length = parseInt(headers['content-length']);
+      if (Number.isNaN(this.length)) {
+        throw Error('could not get length');
+      }
     }
   }
   async read(offset, size) {
@@ -172,8 +174,7 @@ To use it you'd do something like
 import unzipit from 'unzipit';
 
 async function readFiles(url) {
-  const reader = new NetworkReader(url);
-  await reader.init();
+  const reader = new HTTPRangeReader(url);
   const {zip, entries} = await unzipit(reader);
   for (const entry in entries) {
     const data = await entry.arrayBuffer();
@@ -184,7 +185,7 @@ async function readFiles(url) {
 ### Special headers and options for network requests
 
 The library takes a URL but there are no options for cors, or credentials etc. 
-If you need that pass in a blob.
+If you need that pass in a Blob or ArrayBuffer you fetched yourself.
 
 ```js
 const req = await fetch(url, { mode: cors });
