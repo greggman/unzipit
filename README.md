@@ -12,7 +12,7 @@ import unzipit from 'unzipit';
 async function readFiles(url) {
   const {zip, entries} = await unzipit(url);
 
-  // print all entries an their sizes
+  // print all entries and their sizes
   for (const entry in entries) {
     console.log(entry.name, entry.size);
   }
