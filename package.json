@@ -6,6 +6,7 @@
   "module": "dist/unzipit.module.js",
   "scripts": {
     "build": "rollup -c",
+    "eslint": "eslint src/**/*.js test/tests/**/*.js",
     "test": "node test/puppeteer.notjs"
   },
   "files": [
