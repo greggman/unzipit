@@ -427,7 +427,7 @@ export default async function open(source) {
     const req = await fetch(source);
     const blob = await req.blob();
     reader = new BlobReader(blob);
-  } else if (typeof source.length === 'number' && typeof source.read === 'function') {
+  } else if (typeof source.getLength === 'function' && typeof source.read === 'function') {
     reader = source;
   } else {
     throw new Error('unsupported source type');
