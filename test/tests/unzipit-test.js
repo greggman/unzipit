@@ -1,12 +1,12 @@
 /* global chai, describe, it */
 const assert = chai.assert;
 
-import open from '../../dist/unzipit.module.js';
+import unzipit from '../../dist/unzipit.module.js';
 
 describe('unzipit', function() {
   describe('url', function() {
     it('has all entries', async() => {
-      const {zip, entries} = await open('./data/stuff.zip');
+      const {zip, entries} = await unzipit('./data/stuff.zip');
 
       assert.typeOf(zip.comment, 'string');
       assert.instanceOf(zip.commentBytes, Uint8Array);
@@ -29,7 +29,7 @@ describe('unzipit', function() {
     }
 
     it('entries are correct', async() => {
-      const {entries} = await open('./data/stuff.zip');
+      const {entries} = await unzipit('./data/stuff.zip');
       const expected = [
         { name: 'stuff/', isDir: true, },
         { name: 'stuff/dog.txt', content: 'german shepard\n' },
@@ -43,7 +43,7 @@ describe('unzipit', function() {
     });
 
     it('works with zip64', async() => {
-      const {entries} = await open('./data/test64.zip');
+      const {entries} = await unzipit('./data/test64.zip');
       const expected = [
         { name: 'test64/', isDir: true, },
         { name: 'test64/banana.txt', content: '2 bananas\n', },
