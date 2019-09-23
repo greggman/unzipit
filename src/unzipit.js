@@ -35,7 +35,7 @@ class ZipEntry {
     this.comment = entry.comment;
     this.commentBytes = entry.commentBytes;
     this.lastModDate = dosDateTimeToDate(entry.lastModFileDate, entry.lastModFileTime);
-    this.isDirectory = !!(entry.externalFileAttributes & 0x10);
+    this.isDirectory = entry.uncompressedSize === 0 && entry.name.endsWith('/');
   }
   // returns a promise that returns a Blob for this entry
   async blob(type = '') {
