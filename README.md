@@ -186,7 +186,7 @@ You need one or the other not both. See zlib as an example.
 Finally this library is ES7 based.
 
 One area I'm not sure about is worker support. I want this code to be able
-to deflate in a worker but the question is at what level should that happen.
+to inflate in a worker but the question is at what level should that happen.
 Should I wrap an inflate library in a worker interface an use it here?
 Or should I make the user wrap this library at a higher level?
 
@@ -202,6 +202,12 @@ Advantages over other libraries.
   they do have to be read in order and it has very peculiar API where 
   you still have to manually go through all the entries even if
   you don't choose to read their contents. Further it's node only.
+  
+This library does not require all content to be in memory. If you use a Blob
+te browser effectively virtualizes access so it doesn't have to be in memory.
+Only the entries you access use memory. Similarly in node, the examples with
+the file readers will only read the header and whatever entries contents
+you ask for.
 
 ## API
 
