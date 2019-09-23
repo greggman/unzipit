@@ -336,9 +336,9 @@ async function readEntries(reader, centralDirectoryOffset, entryCount, comment, 
     }
 
     // validate file size
-    if (self.validateEntrySizes && entry.compressionMethod === 0) {
+    if (entry.compressionMethod === 0) {
       let expectedCompressedSize = entry.uncompressedSize;
-      if (entry.isEncrypted()) {
+      if ((entry.generalPurposeBitFlag & 0x1) !== 0) {
         // traditional encryption prefixes the file data with a header
         expectedCompressedSize += 12;
       }
