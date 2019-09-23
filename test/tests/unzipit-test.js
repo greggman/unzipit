@@ -10,7 +10,7 @@ describe('unzipit', function() {
 
       assert.typeOf(zip.comment, 'string');
       assert.instanceOf(zip.commentBytes, Uint8Array);
-      assert.equal(entries.length, 6);
+      assert.equal(entries.length, 7);
     });
 
     it('entries are correct', async() => {
@@ -22,11 +22,13 @@ describe('unzipit', function() {
         { name: 'stuff/birds/bird.txt', content: 'parrot\n' },
         { name: 'stuff/cat.txt', content: 'siamese\n', },
         { name: 'stuff/long.txt', content: `${new Array(200).fill('compress').join('')}\n`, },
+        { name: 'stuff/ⓤⓝⓘⓒⓞⓓⓔ-𝖋𝖎𝖑𝖊𝖓𝖆𝖒𝖊-😱.txt', content: 'Lookma! Unicode 😜', }
       ];
       assert.equal(entries.length, expected.length);
       let i = 0;
       for (const entry of entries) {
-        const expect = expected[i++];
+        const expectNdx = expected.findIndex(v => v.name === entry.name);
+        const expect = expected.splice(expectNdx, 1)[0];
         assert.equal(entry.name, expect.name);
         assert.equal(entry.isDirectory, !!expect.isDir);
         if (!expect.isDir) {
@@ -34,6 +36,7 @@ describe('unzipit', function() {
           assert.equal(data, expect.content);
         }
       }
+      assert.equal(expected.length, 0);
     });
 
     /*
