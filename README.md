@@ -1,8 +1,10 @@
 # unzipit.js
 
-Random access unzip library for browser based JavaScript
+Random access unzip library for browser and node based JavaScript
 
 ## How to use
+
+### Browser
 
 ```js
 import unzipit from 'unzipit';
@@ -24,6 +26,102 @@ async function readFiles(url) {
 ```
 
 You can also pass a Blob, ArrayBuffer, TypedArray, or your own Reader
+
+### Node
+
+I'm not quite sure if I should expose node readers or let you do your
+own but here's 3 examples
+
+#### Load a file as an arraybuffer
+
+```js
+const unzipit = require('unzipit');
+const fsPromises = require('fs').promises;
+
+async function readFiles(filename) {
+  const buf = await fsPromises.readFile(filename);
+  const {zip, entries} = await unzipit(new Uint8Array(buf));
+  ... (see code above)
+}
+```
+
+You can also pass your own reader. Here's 2 examples. This first one
+is stateless. That means there is never anything to clean up. But,
+it has the overhead of opening the source file once for each time
+you get the contents of an entry. I have no idea what the overhead
+of that is. 
+
+```js
+const unzipit = require('unzipit');
+const fsPromises = require('fs').promises;
+
+class StatelessFileReader {
+  constructor(filename) {
+    this.filename = filename;
+  }
+  async getLength() {
+    if (this.length === undefined) {
+      const stat = await fsPromises.stat(this.filename);
+      this.length = stat.size;
+    }
+    return this.length;
+  }
+  async read(offset, length) {
+    const fh = await fsPromises.open(this.filename);
+    const data = new Uint8Array(length);
+    await fh.read(data, 0, length, offset);
+    await fh.close();
+    return data;
+  }
+}
+
+async function readFiles(filename) {
+  const reader = new StatelessFileReader(filename);
+  const {zip, entries} = await unzipit(reader);
+  ... (see code above)
+}
+```
+
+Here's also an example of one that only opens the file a single time
+but that means the file stays open until you manually call close.
+
+```js
+class FileReader {
+  constructor(filename) {
+    this.fhp = fsPromises.open(filename);
+  }
+  async close() {
+    const fh = await this.fhp;
+    await fh.close();
+  }
+  async getLength() {
+    if (this.length === undefined) {
+      const fh = await this.fhp;
+      const stat = await fh.stat();
+      this.length = stat.size;
+    }
+    return this.length;
+  }
+  async read(offset, length) {
+    const fh = await this.fhp;
+    const data = new Uint8Array(length);
+    await fh.read(data, 0, length, offset);
+    return data;
+  }
+}
+
+async function doStuff() {
+  // ...
+
+  const reader = new FileReader(filename);
+  const {zip, entries} = await unzipit(reader);
+
+  // ... do stuff with entries ...
+
+  // you must call reader.close for the file to close
+  await reader.close();
+}
+```
 
 ## Why?
 
@@ -155,6 +253,7 @@ class HTTPRangeReader {
         throw Error('could not get length');
       }
     }
+    return this.length;
   }
   async read(offset, size) {
     const req = await fetch(this.url, {
