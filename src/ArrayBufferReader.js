@@ -4,7 +4,7 @@ export default class ArrayBufferReader {
        ? arrayBufferOrView
        : arrayBufferOrView.buffer;
   }
-  get length() {
+  async getLength() {
     return this.buffer.byteLength;
   }
   async read(offset, length) {

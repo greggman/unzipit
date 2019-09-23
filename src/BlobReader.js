@@ -13,7 +13,7 @@ export default class BlobReader {
   constructor(blob) {
     this.blob = blob;
   }
-  get length() {
+  async getLength() {
     return this.blob.size;
   }
   async read(offset, length, ) {

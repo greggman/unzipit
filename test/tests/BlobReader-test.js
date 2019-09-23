@@ -12,17 +12,18 @@ describe('BlobReader', function() {
     const blob = new Blob([ab]);
     const reader = new BlobReader(blob);
 
-    it('should have the correct length', function() {
-      assert.equal(reader.length, ab.byteLength);
+    it('should have the correct length', async() => {
+      const length = await reader.getLength();
+      assert.equal(length, ab.byteLength);
     });
 
-    it('should work at 0 offset', async function() {
+    it('should work at 0 offset', async() => {
       const data = await reader.read(0, 3);
       const view = new Uint8Array(data);
       assert.deepEqual(view, new Uint8Array([11, 22, 33]));
     });
 
-    it('should work at non 0 offset', async function() {
+    it('should work at non 0 offset', async() => {
       const data = await reader.read(97, 3);
       const view = new Uint8Array(data);
       assert.deepEqual(view, new Uint8Array([44, 55, 66]));

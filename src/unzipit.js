@@ -107,9 +107,9 @@ function decodeBuffer(uint8View, isUTF8) {
       : decodeCP437(uint8View);
 }
 
-async function findEndOfCentralDirector(reader) {
-  const size = Math.min(EOCDR_WITHOUT_COMMENT_SIZE + MAX_COMMENT_SIZE, reader.length);
-  const readStart = reader.length - size;
+async function findEndOfCentralDirector(reader, totalLength) {
+  const size = Math.min(EOCDR_WITHOUT_COMMENT_SIZE + MAX_COMMENT_SIZE, totalLength);
+  const readStart = totalLength - size;
   const data = await readAs(reader, readStart, size);
   for (let i = size - EOCDR_WITHOUT_COMMENT_SIZE; i >= 0; --i) {
     if (getUint32LE(data, i) !== EOCDR_SIGNATURE) {
@@ -248,9 +248,9 @@ async function readEntries(reader, centralDirectoryOffset, entryCount, comment, 
     const data = await readAs(reader, readEntryCursor, entry.fileNameLength + entry.extraFieldLength + entry.fileCommentLength);
 
     // 46 - File name
-    const isUtf8 = (entry.generalPurposeBitFlag & 0x800) !== 0;
+    const isUTF8 = (entry.generalPurposeBitFlag & 0x800) !== 0;
     entry.nameBytes = data.slice(0, entry.fileNameLength);
-    entry.name = decodeBuffer(entry.nameBytes, isUtf8);
+    entry.name = decodeBuffer(entry.nameBytes, isUTF8);
 
     // 46+n - Extra field
     const fileCommentStart = entry.fileNameLength + entry.extraFieldLength;
@@ -355,6 +355,9 @@ async function readEntries(reader, centralDirectoryOffset, entryCount, comment, 
 
 async function readEntryData(reader, entry) {
   const buffer = await readAs(reader, entry.relativeOffsetOfLocalHeader, 30);
+  // note: maybe this should be passed in or cached on entry
+  // as it's async so there will be at least one tick (not sure about that)
+  const totalLength = await reader.getLength();
 
   // 0 - Local file header signature = 0x04034b50
   const signature = getUint32LE(buffer, 0);
@@ -394,8 +397,8 @@ async function readEntryData(reader, entry) {
     // bounds check now, because the read streams will probably not complain loud enough.
     // since we're dealing with an unsigned offset plus an unsigned size,
     // we only have 1 thing to check for.
-    if (fileDataEnd > reader.length) {
-      throw new Error(`file data overflows file bounds: ${fileDataStart} +  ${entry.compressedSize}  > ${reader.length}`);
+    if (fileDataEnd > totalLength) {
+      throw new Error(`file data overflows file bounds: ${fileDataStart} +  ${entry.compressedSize}  > ${totalLength}`);
     }
   }
   const data = await readAs(reader, fileDataStart, entry.compressedSize);
@@ -425,9 +428,11 @@ export default async function open(source) {
     throw new Error('unsupported source type');
   }
 
-  if (reader.length > Number.MAX_SAFE_INTEGER) {
-    throw new Error(`file too large. size: ${reader.length}. Only file sizes up 4503599627370496 bytes are supported`);
+  const totalLength = await reader.getLength();
+
+  if (totalLength > Number.MAX_SAFE_INTEGER) {
+    throw new Error(`file too large. size: ${totalLength}. Only file sizes up 4503599627370496 bytes are supported`);
   }
 
-  return await findEndOfCentralDirector(reader);
+  return await findEndOfCentralDirector(reader, totalLength);
 }
