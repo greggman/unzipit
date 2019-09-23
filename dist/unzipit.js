@@ -1,4 +1,4 @@
-/* unzipit@0.0.3, license MIT */
+/* unzipit@0.0.4, license MIT */
 (function (global, factory) {
   typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = factory() :
   typeof define === 'function' && define.amd ? define(factory) :
@@ -698,19 +698,19 @@
            getUint32LE(uint8View, offset + 4) * 0x100000000;
   }
 
-  /*
-  const decodeCP437 = (function() {
-    const cp437 = '\u0000☺☻♥♦♣♠•◘○◙♂♀♪♫☼►◄↕‼¶§▬↨↑↓→←∟↔▲▼ !"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~⌂ÇüéâäàåçêëèïîìÄÅÉæÆôöòûùÿÖÜ¢£¥₧ƒáíóúñÑªº¿⌐¬½¼¡«»░▒▓│┤╡╢╖╕╣║╗╝╜╛┐└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀αßΓπΣσµτΦΘΩδ∞φε∩≡±≥≤⌠⌡÷≈°∙·√ⁿ²■ ';
-
-    return function(uint8view) {
-      return Array.from(uint8view).map(v => cp437[v]).join('');
-    };
-  }());
-  */
+  /* eslint-disable no-irregular-whitespace */
+  // const decodeCP437 = (function() {
+  //   const cp437 = '\u0000☺☻♥♦♣♠•◘○◙♂♀♪♫☼►◄↕‼¶§▬↨↑↓→←∟↔▲▼ !"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~⌂ÇüéâäàåçêëèïîìÄÅÉæÆôöòûùÿÖÜ¢£¥₧ƒáíóúñÑªº¿⌐¬½¼¡«»░▒▓│┤╡╢╖╕╣║╗╝╜╛┐└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀αßΓπΣσµτΦΘΩδ∞φε∩≡±≥≤⌠⌡÷≈°∙·√ⁿ²■ ';
+  //
+  //   return function(uint8view) {
+  //     return Array.from(uint8view).map(v => cp437[v]).join('');
+  //   };
+  // }());
+  /* eslint-enable no-irregular-whitespace */
 
   const utf8Decoder = new TextDecoder();
-  function decodeBuffer(uint8View, isUTF8) {
-    return utf8Decoder.decode(uint8View);  
+  function decodeBuffer(uint8View/*, isUTF8*/) {
+    return utf8Decoder.decode(uint8View);
     /*
     AFAICT the UTF8 flat is not set so it's 100% up to the user
     to self decode if their file is not utf8 filenames
@@ -941,9 +941,9 @@
       }
 
       // validate file size
-      if (self.validateEntrySizes && entry.compressionMethod === 0) {
+      if (entry.compressionMethod === 0) {
         let expectedCompressedSize = entry.uncompressedSize;
-        if (entry.isEncrypted()) {
+        if ((entry.generalPurposeBitFlag & 0x1) !== 0) {
           // traditional encryption prefixes the file data with a header
           expectedCompressedSize += 12;
         }
@@ -1024,7 +1024,7 @@
 
   async function open(source) {
     let reader;
-    if (source instanceof Blob) {
+    if (typeof Blob !== 'undefined' && source instanceof Blob) {
       reader = new BlobReader(source);
     } else if (source instanceof ArrayBuffer || (source && source.buffer && source.buffer instanceof ArrayBuffer)) {
       reader = new ArrayBufferReader(source);
@@ -1032,7 +1032,7 @@
       const req = await fetch(source);
       const blob = await req.blob();
       reader = new BlobReader(blob);
-    } else if (typeof source.length === 'number' && typeof source.read === 'function') {
+    } else if (typeof source.getLength === 'function' && typeof source.read === 'function') {
       reader = source;
     } else {
       throw new Error('unsupported source type');
