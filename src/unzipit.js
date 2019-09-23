@@ -90,19 +90,19 @@ function getUint64LE(uint8View, offset) {
          getUint32LE(uint8View, offset + 4) * 0x100000000;
 }
 
-/*
-const decodeCP437 = (function() {
-  const cp437 = '\u0000☺☻♥♦♣♠•◘○◙♂♀♪♫☼►◄↕‼¶§▬↨↑↓→←∟↔▲▼ !"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~⌂ÇüéâäàåçêëèïîìÄÅÉæÆôöòûùÿÖÜ¢£¥₧ƒáíóúñÑªº¿⌐¬½¼¡«»░▒▓│┤╡╢╖╕╣║╗╝╜╛┐└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀αßΓπΣσµτΦΘΩδ∞φε∩≡±≥≤⌠⌡÷≈°∙·√ⁿ²■ ';
-
-  return function(uint8view) {
-    return Array.from(uint8view).map(v => cp437[v]).join('');
-  };
-}());
-*/
+/* eslint-disable no-irregular-whitespace */
+// const decodeCP437 = (function() {
+//   const cp437 = '\u0000☺☻♥♦♣♠•◘○◙♂♀♪♫☼►◄↕‼¶§▬↨↑↓→←∟↔▲▼ !"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~⌂ÇüéâäàåçêëèïîìÄÅÉæÆôöòûùÿÖÜ¢£¥₧ƒáíóúñÑªº¿⌐¬½¼¡«»░▒▓│┤╡╢╖╕╣║╗╝╜╛┐└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀αßΓπΣσµτΦΘΩδ∞φε∩≡±≥≤⌠⌡÷≈°∙·√ⁿ²■ ';
+//
+//   return function(uint8view) {
+//     return Array.from(uint8view).map(v => cp437[v]).join('');
+//   };
+// }());
+/* eslint-enable no-irregular-whitespace */
 
 const utf8Decoder = new TextDecoder();
-function decodeBuffer(uint8View, isUTF8) {
-  return utf8Decoder.decode(uint8View);  
+function decodeBuffer(uint8View/*, isUTF8*/) {
+  return utf8Decoder.decode(uint8View);
   /*
   AFAICT the UTF8 flat is not set so it's 100% up to the user
   to self decode if their file is not utf8 filenames

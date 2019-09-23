@@ -22,10 +22,9 @@ describe('unzipit', function() {
         { name: 'stuff/birds/bird.txt', content: 'parrot\n' },
         { name: 'stuff/cat.txt', content: 'siamese\n', },
         { name: 'stuff/long.txt', content: `${new Array(200).fill('compress').join('')}\n`, },
-        { name: 'stuff/ⓤⓝⓘⓒⓞⓓⓔ-𝖋𝖎𝖑𝖊𝖓𝖆𝖒𝖊-😱.txt', content: 'Lookma! Unicode 😜', }
+        { name: 'stuff/ⓤⓝⓘⓒⓞⓓⓔ-𝖋𝖎𝖑𝖊𝖓𝖆𝖒𝖊-😱.txt', content: 'Lookma! Unicode 😜', },
       ];
       assert.equal(entries.length, expected.length);
-      let i = 0;
       for (const entry of entries) {
         const expectNdx = expected.findIndex(v => v.name === entry.name);
         const expect = expected.splice(expectNdx, 1)[0];
