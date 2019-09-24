@@ -1,4 +1,4 @@
-/* unzipit@0.1.1, license MIT */
+/* unzipit@0.1.2, license MIT */
 function deflateRaw(data, out, opos, lvl) {	
 	var opts = [
 	/*

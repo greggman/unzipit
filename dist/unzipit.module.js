@@ -1,4 +1,4 @@
-/* unzipit@0.1.1, license MIT */
+/* unzipit@0.1.2, license MIT */
 /* global SharedArrayBuffer */
 
 function readBlobAsArrayBuffer(blob) {
@@ -632,16 +632,10 @@ let nextId = 0;
 // do. You don't know which will finish first. If you give
 // the worker with more work to do the request then you'll
 // waste time.
+const workers = [];
+const availableWorkers = [];
 const waitingForWorkerQueue = [];
 const currentlyProcessingIdToRequestMap = new Map();
-
-// class WorkerInfo {
-//   worker,
-//   busy,
-// }
-
-let numWorkers = 0;
-const availableWorkers = [];
 
 function handleResult(e) {
   availableWorkers.push(e.target);
@@ -690,9 +684,9 @@ const workerHelper = (function() {
 }());
 
 function getAvailableWorker() {
-  if (availableWorkers.length === 0 && numWorkers < config.numWorkers) {
-    ++numWorkers;
+  if (availableWorkers.length === 0 && workers.length < config.numWorkers) {
     const worker = workerHelper.createWorker(config.workerURL);
+    workers.push(worker);
     workerHelper.addEventListener(worker, handleResult);
     availableWorkers.push(worker);
   }
@@ -792,10 +786,18 @@ function inflateRawAsync(src, uncompressedSize, type) {
   });
 }
 
+function clearArray(arr) {
+  arr.splice(0, arr.length);
+}
+
 async function cleanup() {
-  for (const worker of availableWorkers) {
+  for (const worker of workers) {
     await workerHelper.terminate(worker);
   }
+  clearArray(workers);
+  clearArray(availableWorkers);
+  clearArray(waitingForWorkerQueue);
+  currentlyProcessingIdToRequestMap.clear();
 }
 
 /*
@@ -920,7 +922,7 @@ async function findEndOfCentralDirector(reader, totalLength) {
     }
 
     // 0 - End of central directory signature
-    const eocdr = new Uint8Array(data.buffer, i);
+    const eocdr = new Uint8Array(data.buffer, data.byteOffset + i);
     // 4 - Number of this disk
     const diskNumber = getUint16LE(eocdr, 4);
     if (diskNumber !== 0) {
@@ -1255,7 +1257,7 @@ async function unzip(source) {
 }
 
 function cleanup$1() {
-  cleanup(); 
+  cleanup();
 }
 
 export { cleanup$1 as cleanup, setOptions$1 as setOptions, unzip, unzipRaw };
