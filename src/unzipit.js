@@ -129,7 +129,7 @@ async function findEndOfCentralDirector(reader, totalLength) {
     }
 
     // 0 - End of central directory signature
-    const eocdr = new Uint8Array(data.buffer, i);
+    const eocdr = new Uint8Array(data.buffer, data.byteOffset + i);
     // 4 - Number of this disk
     const diskNumber = getUint16LE(eocdr, 4);
     if (diskNumber !== 0) {
