@@ -1,7 +1,7 @@
 
 /* eslint-env node, mocha */
 const assert = require('chai').assert;
-const unzip = require('../dist/unzipit.js').unzip;
+const {unzip, setOptions, cleanup} = require('../dist/unzipit.js');
 const fsPromises = require('fs').promises;
 const path = require('path');
 
@@ -78,22 +78,48 @@ describe('unzipit', function() {
     'stuff/ⓤⓝⓘⓒⓞⓓⓔ-𝖋𝖎𝖑𝖊𝖓𝖆𝖒𝖊-😱.txt': { content: 'Lookma! Unicode 😜', },
   };
 
-  it('entries are correct', async() => {
-    const buf = await fsPromises.readFile(path.join(__dirname, 'data', 'stuff.zip'));
-    const {entries} = await unzip(new Uint8Array(buf));
-    await checkZipEntriesMatchExpected(entries, expectedStuff);
+  function addTests() {
+    it('entries are correct', async() => {
+      const buf = await fsPromises.readFile(path.join(__dirname, 'data', 'stuff.zip'));
+      const {entries} = await unzip(new Uint8Array(buf));
+      await checkZipEntriesMatchExpected(entries, expectedStuff);
+    });
+
+    it('use StatelessFileReader', async() => {
+      const reader = new StatelessFileReader(path.join(__dirname, 'data', 'stuff.zip'));
+      const {entries} = await unzip(reader);
+      await checkZipEntriesMatchExpected(entries, expectedStuff);
+    });
+
+    it('use FileReader', async() => {
+      const reader = new FileReader(path.join(__dirname, 'data', 'stuff.zip'));
+      const {entries} = await unzip(reader);
+      await checkZipEntriesMatchExpected(entries, expectedStuff);
+      reader.close();
+    });
+  }
+
+  describe('without workers', () => {
+
+    before(() => {
+      setOptions({useWorkers: false});
+    });
+
+    addTests();
+
   });
 
-  it('use StatelessFileReader', async() => {
-    const reader = new StatelessFileReader(path.join(__dirname, 'data', 'stuff.zip'));
-    const {entries} = await unzip(reader);
-    await checkZipEntriesMatchExpected(entries, expectedStuff);
-  });
+  describe('without workers', () => {
 
-  it('use FileReader', async() => {
-    const reader = new FileReader(path.join(__dirname, 'data', 'stuff.zip'));
-    const {entries} = await unzip(reader);
-    await checkZipEntriesMatchExpected(entries, expectedStuff);
-    reader.close();
+    before(() => {
+      setOptions({workerURL: path.join(__dirname, '..', 'dist', 'unzipit-worker.js')});
+    });
+
+    addTests();
+
+    after(() => {
+      cleanup();
+    });
+
   });
 });
