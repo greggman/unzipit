@@ -2,37 +2,70 @@
 
 Random access unzip library for browser and node based JavaScript
 
-## How to use
+# How to use
 
-### Browser
+## without workers
 
 ```js
-import unzipit from 'unzipit';
+import {unzip} from 'unzipit';
 
 async function readFiles(url) {
-  const {zip, entries} = await unzipit(url);
+  const {entries} = await unzip(url);
 
   // print all entries and their sizes
-  for (const entry in entries) {
-    console.log(entry.name, entry.size);
+  for (const [name, entry] in Object.entries(entries)) {
+    console.log(name, entry.size);
   }
   
-  // read the 4th entry as an arraybuffer
-  const arrayBuffer = await entries[3].arrayBuffer();
+  // read an entry as an arraybuffer
+  const arrayBuffer = await entries['path/to/file'].arrayBuffer();
 
-  // read the 9th entry as a blob and tag it with mime type 'image/png'
-  const blob = await entries[8].blob('image/png');
+  // read an entry as a blob and tag it with mime type 'image/png'
+  const blob = await entries['path/to/otherFile'].blob('image/png');
 }
 ```
 
-You can also pass a Blob, ArrayBuffer, TypedArray, or your own Reader
+## with workers
 
-### Node
+```js
+import {unzip, setOptions} from 'unzipit';
 
-I'm not quite sure if I should expose node readers or let you do your
-own but here's 3 examples
+setOptions({workerURL: 'path/to/unzipit-worker.module.js'});
 
-#### Load a file as an arraybuffer
+async function readFiles(url) {
+  const {entries} = await unzip(url);
+  ...
+}
+```
+
+or if you prefer
+
+```js
+import * as unzipit from 'unzipit';
+
+unzipit.setOptions({workerURL: 'path/to/unzipit-worker.module.js'});
+
+async function readFiles(url) {
+  const {entries} = await unzipit.unzip(url);
+  ...
+}
+```
+
+
+You can also pass a [`Blob`](https://developer.mozilla.org/en-US/docs/Web/API/Blob),
+[`ArrayBuffer`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/ArrayBuffer),
+[`SharedArrayBuffer`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/SharedArrayBuffer),
+[`TypedArray`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/TypedArray),
+or your own `Reader`
+
+## Node
+
+For node you need to make your own `Reader` or pass in an
+[`ArrayBuffer`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/ArrayBuffer),
+[`SharedArrayBuffer`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/SharedArrayBuffer),
+or [`TypedArray`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/TypedArray).
+
+### Load a file as an arraybuffer
 
 ```js
 const unzipit = require('unzipit');
@@ -40,7 +73,7 @@ const fsPromises = require('fs').promises;
 
 async function readFiles(filename) {
   const buf = await fsPromises.readFile(filename);
-  const {zip, entries} = await unzipit(new Uint8Array(buf));
+  const {zip, entries} = await unzipit.unzip(new Uint8Array(buf));
   ... (see code above)
 }
 ```
@@ -77,7 +110,7 @@ class StatelessFileReader {
 
 async function readFiles(filename) {
   const reader = new StatelessFileReader(filename);
-  const {zip, entries} = await unzipit(reader);
+  const {zip, entries} = await unzipit.unzip(reader);
   ... (see code above)
 }
 ```
@@ -114,7 +147,7 @@ async function doStuff() {
   // ...
 
   const reader = new FileReader(filename);
-  const {zip, entries} = await unzipit(reader);
+  const {zip, entries} = await unzipit.unzip(reader);
 
   // ... do stuff with entries ...
 
@@ -133,11 +166,11 @@ only worked on node, I needed a browser based solution for Electron.
 Note that to repo the behavior of most unzip libs would just be
 
 ```js
-import unzipit from 'unzipit';
+import {unzip} from 'unzipit';
 
 async function readFiles(url) {
-  const {zip, entries} = await unzipit(url);
-  for (const entry in entries) {
+  const {entries} = await unzip(url);
+  for (const entry of Object.values(entries)) {
     if (!entry.isDirectory) {
       const data = await entry.arrayBuffer();
     }
@@ -156,12 +189,14 @@ have non-utf8 filenames in them. The solution for this library is to do that on 
 Example
 
 ```js
-const {zip, entries} = await unzipit(url);
+const {zip, entriesArray} = await unzipit.unzipRaw(url);
 // decode names as big5 (chinese)
 const decoder = new TextDecoder('big5');
-entries.forEach(entry => {
+entriesArray.forEach(entry => {
   entry.name = decoder.decode(entry.nameBytes);
 });
+const entries = Object.fromEntries(entriesArray.map(v => [v.name, v]));
+... // same as above beyond this point
 ```
     
 So much easier than passing in functions to decode names or setting flags whether or not to decode them.
@@ -169,8 +204,8 @@ So much easier than passing in functions to decode names or setting flags whethe
 Same thing with filenames. If you care about slashes or backslashes do that yourself outside the library
 
 ```js
-const {zip, entries} = await unzipit(url);
-// change slashes and backslashes into -
+const {entries} = await unzipit(url);
+// change slashes and backslashes into '-'
 entries.forEach(entry => {
   entry.name = name.replace(/\\|\//g, '-');
 });
@@ -183,12 +218,8 @@ both. Plenty of projects only need to do one or the other.
 Similarly inflate and deflate libraries should be separate from zip, unzip libraries.
 You need one or the other not both. See zlib as an example.
 
-Finally this library is ES7 based.
-
-One area I'm not sure about is worker support. I want this code to be able
-to inflate in a worker but the question is at what level should that happen.
-Should I wrap an inflate library in a worker interface an use it here?
-Or should I make the user wrap this library at a higher level?
+This library is ES6 based using async/await and import which makes the code
+much simpler.
 
 Advantages over other libraries. 
 
@@ -204,17 +235,40 @@ Advantages over other libraries.
   you don't choose to read their contents. Further it's node only.
   
 This library does not require all content to be in memory. If you use a Blob
-te browser effectively virtualizes access so it doesn't have to be in memory.
-Only the entries you access use memory. Similarly in node, the examples with
-the file readers will only read the header and whatever entries contents
-you ask for.
-
-## API
+the browser can effectively virtualize access so it doesn't have to be in memory.
+Only the entries you access use memory. As well, if you only need the data
+for images or video or audio then you can do things like
 
 ```js
-const {zip, entries} = await unzipit(url/blob/arraybuffer/reader)
-// note: If you need more options for your url then fetch your own blob and pass the blob in
+const {entries} = await unzip(url);
+const blob = await entries['/some/image.jpg'].blob('image/jpeg');
+const url = URL.createObjectURL(blob);
+const img = new Image();
+img.src = url;
 ```
+
+Notice there is no access to the data using Blobs which means the browser
+manages them. They don't count as part of the JavaScript heap.
+
+In node, the examples with the file readers will only read the header and whatever entries contents
+you ask for so similarly you can avoid having everything in memory except the things you read.
+
+
+# API
+
+```js
+import { unzipit, unzipitRaw, setOptions } from 'unzipit';
+```
+
+## unzip
+## unzipRaw
+
+`unzip` and `unzipRaw` are async functions that take a url, `Blob`, `TypedArray`, or `ArrayBuffer`.
+Both functions return an object with fields `zip` and `entries`.
+The difference is with `unzip` the `entries` is an object mapping filenames to `ZipEntry`s where as `unzipRaw` it's
+an array of `ZipEntry`s. The reason to use `unzipRaw` over `unzip` is if the filenames are not utf8
+then the library can't make an object from the names. In that case you get an array of entries, use `entry.nameBytes`
+and decode the names as you please.
 
 ```js
 class Zip {
@@ -240,14 +294,30 @@ class ZipEntry {
 }
 ```
 
-## Notes:
+## setOptions
 
-### Caching
+The options are 
+
+* `useWorkers`: true/false
+
+* `workerURL`: string
+
+  The URL to use to load the worker script. Note setting this automatically sets `useWorkers` to true
+
+* `numWorkers`: number (default 1)
+
+  How many workers to use. You can inflate more files in parallel with more workers.
+
+# Notes:
+
+## Caching
 
 If you ask for the same entry twice it will be read twice and decompressed twice.
 If you want to cache entires implement that at a level above unzipit
 
-### Streaming
+## SharedArrayBuffer
+
+## Streaming
 
 You can't stream zip files. The only valid way to read a zip file is to read the
 central directory which is at the end of the zip file. Sure there are zip files
@@ -289,59 +359,58 @@ class HTTPRangeReader {
 To use it you'd do something like
 
 ```js
-import unzipit from 'unzipit';
+import {unzip} from 'unzipit';
 
 async function readFiles(url) {
   const reader = new HTTPRangeReader(url);
-  const {zip, entries} = await unzipit(reader);
+  const {zip, entries} = await unzip(reader);
   for (const entry in entries) {
     const data = await entry.arrayBuffer();
   }
 }
 ``` 
 
-### Special headers and options for network requests
+## Special headers and options for network requests
 
 The library takes a URL but there are no options for cors, or credentials etc. 
 If you need that pass in a Blob or ArrayBuffer you fetched yourself.
 
 ```js
+import {unzip} from 'unzipit';
+
+...
+
 const req = await fetch(url, { mode: cors });
 const blob = await req.blob();
-const {entries} = await unzipit(blob);
+const {entries} = await unzip(blob);
 ```
 
-### Non UTF-8 Filenames
+## Non UTF-8 Filenames
 
 The zip standard predates unicode so it's possible and apparently not uncommon for files
 to have non-unicode names. `entry.nameBytes` contains the raw bytes of the filename.
-so you are free to decode the name using your own methods.
+so you are free to decode the name using your own methods. See example above.
 
-### An Object instead of an array
+## ArrayBuffer and SharedArrayBuffer caveats
 
-`entries` in all the examples above is an array. To turn it into an object of entries
-by filename in 1 line
+If you pass in an `ArrayBuffer` or `SharedArrayBuffer` you need to keep the data unchanged
+until you're finished using the data. The library doesn't make a copy, it uses the buffer directly.
 
-```js
-const {entries} = await unzipit(blob);
-const files = Object.fromEntries(entries.map(e => [e.name, e])); 
-```
-
-## Testing
+# Testing
 
 When writing tests serve the folder with your favorite web server (recommend [`http-server`](https://www.npmjs.com/package/http-server))
 then go to `http://localhost:8080/test/` to easily re-run the tests.
 
 Of course you can also `npm test` to run them from the command line.
 
-### Debugging 
+## Debugging 
 
 Follow the instructions on testing but add  `?timeout=0` to the URL as in `http://localhost:8080/tests/?timeout=0`
 
-## Acknowledgements
+# Acknowledgements
 
 The code is **heavily** based on [yauzl](https://github.com/thejoshwolfe/yauzl)
 
-## Licence
+# Licence
 
 MIT
