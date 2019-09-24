@@ -1,7 +1,6 @@
 import ArrayBufferReader from './ArrayBufferReader.js';
 import BlobReader from './BlobReader.js';
-import {inflateRaw} from 'uzip-module';
-
+import {inflateRaw, setOptions as setWorkerOptions} from './inflate.js';
 /*
 class Zip {
   constructor(reader) {
@@ -34,13 +33,13 @@ class ZipEntry {
     this.compressedSize = entry.compressedSize;
     this.comment = entry.comment;
     this.commentBytes = entry.commentBytes;
+    this.compressionMethod = entry.compressionMethod;
     this.lastModDate = dosDateTimeToDate(entry.lastModFileDate, entry.lastModFileTime);
     this.isDirectory = entry.uncompressedSize === 0 && entry.name.endsWith('/');
   }
   // returns a promise that returns a Blob for this entry
-  async blob(type = '') {
-    const buffer = await this.arrayBuffer();
-    return new Blob([buffer], {type});
+  async blob(type = 'application/octet-stream') {
+    return await readEntryData(this._reader, this._entry, type);
   }
   // returns a promise that returns an ArrayBuffer for this entry
   async arrayBuffer() {
@@ -358,7 +357,8 @@ async function readEntries(reader, centralDirectoryOffset, entryCount, comment, 
   };
 }
 
-async function readEntryData(reader, entry) {
+// returns an ArrayBuffer if type is falsy or a Blob of mime-type 'type'
+async function readEntryData(reader, entry, type) {
   const buffer = await readAs(reader, entry.relativeOffsetOfLocalHeader, 30);
   // note: maybe this should be passed in or cached on entry
   // as it's async so there will be at least one tick (not sure about that)
@@ -408,16 +408,21 @@ async function readEntryData(reader, entry) {
   }
   const data = await readAs(reader, fileDataStart, entry.compressedSize);
   if (!decompress) {
+    if (type) {
+      return new Blob([data], {type});
+    }
     return data;
   }
 
-  const dst = new Uint8Array(entry.uncompressedSize);
-  inflateRaw(data, dst);
-  return dst;
+  const result = await inflateRaw(data.buffer, entry.uncompressedSize, type);
+  return result;
 }
 
+export function setOptions(options) {
+  setWorkerOptions(options);
+}
 
-export default async function open(source) {
+export async function unzipit(source) {
   let reader;
   if (typeof Blob !== 'undefined' && source instanceof Blob) {
     reader = new BlobReader(source);
