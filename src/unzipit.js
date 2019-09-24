@@ -417,7 +417,7 @@ async function readEntryData(reader, entry, type) {
   const data = await readAs(reader, fileDataStart, entry.compressedSize);
   if (!decompress) {
     if (type) {
-      return new Blob([data], {type});
+      return new Blob([isSharedArrayBuffer(data.buffer) ? new Uint8Array(data) : data], {type});
     }
     return data.slice().buffer;
   }
