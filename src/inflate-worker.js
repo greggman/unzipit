@@ -7,8 +7,6 @@ import {readBlobAsArrayBuffer, isBlob} from './utils.js';
 // zip file then the loop going through the directory
 // might take time but that's an unlikely situation.
 
-
-  
 // class InflateRequest {
 //   id: string,
 //   data: arraybuffer, sharedarraybuffer, blob

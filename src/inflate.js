@@ -1,6 +1,5 @@
 
 import {inflateRaw} from 'uzip-module';
-import {isBlob, isSharedArrayBuffer} from './utils.js';
 
 const config = {
   numWorkers: 1,
@@ -62,6 +61,20 @@ function processWaitingForWorkerQueue() {
     const {id, src, uncompressedSize, type, resolve, reject} = waitingForWorkerQueue.shift();
     currentlyProcessingIdToRequestMap.set(id, {id, resolve, reject});
     const transferables = [];
+    // NOTE: Originally I thought you could transfer an ArrayBuffer
+    // the code on this side is often using views into the entire file
+    // which means if we transferred we'd lose the entire file. That sucks
+    // because it means there's an expensive copy to send the uncompressed
+    // data to the worker.
+    //
+    // Also originally I thought we could send a Blob but we'd need to refactor
+    // the code in unzipit/readEntryData as currently it reads the uncompressed
+    // bytes.
+    //
+    // We could hack in sending a Blob but it feels like a hack (too many ifs)
+    // We'd only send a blob if the source is a BlobReader and I actually have
+    // no idea io slicing a Blob is efficient.
+    //
     //if (!isBlob(src) && !isSharedArrayBuffer(src)) {
     //  transferables.push(src);
     //}
