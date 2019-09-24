@@ -156,6 +156,19 @@ async function doStuff() {
 }
 ```
 
+### Workers in Node
+
+```js
+const unzipit = require('unzipit');
+
+unzipit.setOptions({workerURL: require.resolve('unzipit/dist/unzipit-worker.js')});
+
+...
+
+// Only if you need node to exit you need to shut down the workers.
+unzipit.cleanup();
+```
+
 ## Why?
 
 Most of the js libraries I looked at would decompress all files in the zip file.
