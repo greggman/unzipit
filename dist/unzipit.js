@@ -1,25 +1,16 @@
-/* unzipit@0.0.4, license MIT */
+/* unzipit@0.1.0, license MIT */
 (function (global, factory) {
-  typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = factory() :
-  typeof define === 'function' && define.amd ? define(factory) :
-  (global = global || self, global.unzipit = factory());
-}(this, function () { 'use strict';
+  typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
+  typeof define === 'function' && define.amd ? define(['exports'], factory) :
+  (global = global || self, factory(global.unzipit = {}));
+}(this, function (exports) { 'use strict';
 
-  class ArrayBufferReader {
-    constructor(arrayBufferOrView) {
-      this.buffer = arrayBufferOrView instanceof ArrayBuffer
-         ? arrayBufferOrView
-         : arrayBufferOrView.buffer;
-    }
-    async getLength() {
-      return this.buffer.byteLength;
-    }
-    async read(offset, length) {
-      return this.buffer.slice(offset, offset + length);
-    }
-  }
+  /* global SharedArrayBuffer */
 
   function readBlobAsArrayBuffer(blob) {
+    if (blob.arrayBuffer) {
+      return blob.arrayBuffer();
+    }
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.addEventListener('loadend', () => {
@@ -28,6 +19,24 @@
       reader.addEventListener('error', reject);
       reader.readAsArrayBuffer(blob);
     });
+  }
+
+  function isSharedArrayBuffer(b) {
+    return typeof SharedArrayBuffer !== 'undefined' && b instanceof SharedArrayBuffer;
+  }
+
+  class ArrayBufferReader {
+    constructor(arrayBufferOrView) {
+      this.buffer = (arrayBufferOrView instanceof ArrayBuffer || isSharedArrayBuffer(arrayBufferOrView))
+         ? arrayBufferOrView
+         : arrayBufferOrView.buffer;
+    }
+    async getLength() {
+      return this.buffer.byteLength;
+    }
+    async read(offset, length) {
+      return new Uint8Array(this.buffer, offset, length);
+    }
   }
 
   class BlobReader {
@@ -39,7 +48,8 @@
     }
     async read(offset, length, ) {
       const blob = this.blob.slice(offset, offset + length);
-      return await readBlobAsArrayBuffer(blob);
+      const arrayBuffer = await readBlobAsArrayBuffer(blob);
+      return new Uint8Array(arrayBuffer);
     }
   }
 
@@ -610,6 +620,149 @@
 
   function inflateRaw(file, buf) {  return F.inflate(file, buf);  }
 
+  const config = {
+    numWorkers: 1,
+    workerURL: '',
+    useWorkers: false,
+  };
+
+  let nextId = 0;
+
+  // Requests are put on a queue.
+  // We don't send the request to the worker until the worker
+  // is finished. This probably adds a small amount of latency
+  // but the issue is imagine you have 2 workers. You give worker
+  // A x seconds of work to do and worker B y seconds of work to
+  // do. You don't know which will finish first. If you give
+  // the worker with more work to do the request then you'll
+  // waste time.
+  const waitingForWorkerQueue = [];
+  const currentlyProcessingIdToRequestMap = new Map();
+
+  // class WorkerInfo {
+  //   worker,
+  //   busy,
+  // }
+
+  let numWorkers = 0;
+  const availableWorkers = [];
+
+  function handleResult(e) {
+    availableWorkers.push(e.target);
+    processWaitingForWorkerQueue();
+    const {id, error, data} = e.data;
+    const request = currentlyProcessingIdToRequestMap.get(id);
+    currentlyProcessingIdToRequestMap.delete(id);
+    if (error) {
+      request.reject(error);
+    } else {
+      request.resolve(data);
+    }
+  }
+
+  function getAvailableWorker() {
+    if (availableWorkers.length === 0 && numWorkers < config.numWorkers) {
+      ++numWorkers;
+      const worker = new Worker(config.workerURL);
+      worker.onmessage = handleResult;
+      availableWorkers.push(worker);
+    }
+    return availableWorkers.pop();
+  }
+
+  function processWaitingForWorkerQueue() {
+    if (waitingForWorkerQueue.length === 0) {
+      return;
+    }
+
+    const worker = getAvailableWorker();
+    if (worker) {
+      const {id, src, uncompressedSize, type, resolve, reject} = waitingForWorkerQueue.shift();
+      currentlyProcessingIdToRequestMap.set(id, {id, resolve, reject});
+      const transferables = [];
+      // NOTE: Originally I thought you could transfer an ArrayBuffer
+      // the code on this side is often using views into the entire file
+      // which means if we transferred we'd lose the entire file. That sucks
+      // because it means there's an expensive copy to send the uncompressed
+      // data to the worker.
+      //
+      // Also originally I thought we could send a Blob but we'd need to refactor
+      // the code in unzipit/readEntryData as currently it reads the uncompressed
+      // bytes.
+      //
+      // We could hack in sending a Blob but it feels like a hack (too many ifs)
+      // We'd only send a blob if the source is a BlobReader and I actually have
+      // no idea io slicing a Blob is efficient.
+      //
+      //if (!isBlob(src) && !isSharedArrayBuffer(src)) {
+      //  transferables.push(src);
+      //}
+      worker.postMessage({
+        type: 'inflate',
+        data: {
+          id,
+          type,
+          src,
+          uncompressedSize,
+        },
+      }, transferables);
+    }
+  }
+
+  function setOptions(options) {
+    config.workerURL = options.workerURL || config.workerURL;
+    // there's no reason to set the workerURL if you're not going to use workers
+    if (options.workerURL) {
+      config.useWorkers = true;
+    }
+    config.useWorkers = options.useWorkers !== undefined ? options.useWorkers : config.useWorkers;
+    config.numWorkers = options.numWorkers || config.numWorkers;
+  }
+
+  // type: undefined or mimeType string (eg: 'image/png')
+  //
+  // if `type` is falsy then an ArrayBuffer is returned
+  //
+  //
+  // It has to take non-zero time to put a large typed array in a Blob since the very
+  // next instruction you could change the contents of the array. So, if you're reading
+  // the zip file for images/video/audio then all you want is a Blob on which to get a URL.
+  // so that operation of putting the data in a Blob should happen in the worker.
+  //
+  // Conversely if you want the data itself then you want an ArrayBuffer immediately
+  // since the worker can transfer its ArrayBuffer zero copy.
+  function inflateRawAsync(src, uncompressedSize, type) {
+    return new Promise((resolve, reject) => {
+      // note: there is potential an expensive copy here. In order for the data
+      // to make it into the worker we need to copy the data to the worker unless
+      // it's a Blob or a SharedArrayBuffer.
+      //
+      // Solutions:
+      //
+      // 1. A minor enhancement, if `uncompressedSize` is small don't call the worker.
+      //
+      //    might be a win period as their is overhead calling the worker
+      //
+      // 2. Move the entire library to the worker
+      //
+      //    Good, Maybe faster if you pass a URL, Blob, or SharedArrayBuffer? Not sure about that
+      //    as those are also easy to transfer. Still slow if you pass an ArrayBuffer
+      //    as the ArrayBuffer has to be copied to the worker.
+      //
+      // I guess benchmarking is really the only thing to try.
+      if (config.useWorkers) {
+        waitingForWorkerQueue.push({src, uncompressedSize, type, resolve, reject, id: nextId++});
+        processWaitingForWorkerQueue();
+      } else {
+        const dst = new Uint8Array(uncompressedSize);
+        inflateRaw(src, dst);
+        resolve(type
+           ? new Blob([dst], {type})
+           : dst.buffer);
+      }
+    });
+  }
+
   /*
   class Zip {
     constructor(reader) {
@@ -642,13 +795,13 @@
       this.compressedSize = entry.compressedSize;
       this.comment = entry.comment;
       this.commentBytes = entry.commentBytes;
+      this.compressionMethod = entry.compressionMethod;
       this.lastModDate = dosDateTimeToDate(entry.lastModFileDate, entry.lastModFileTime);
       this.isDirectory = entry.uncompressedSize === 0 && entry.name.endsWith('/');
     }
     // returns a promise that returns a Blob for this entry
-    async blob(type = '') {
-      const buffer = await this.arrayBuffer();
-      return new Blob([buffer], {type});
+    async blob(type = 'application/octet-stream') {
+      return await readEntryData(this._reader, this._entry, type);
     }
     // returns a promise that returns an ArrayBuffer for this entry
     async arrayBuffer() {
@@ -670,9 +823,8 @@
   const MAX_COMMENT_SIZE = 0xffff; // 2-byte size
   const EOCDR_SIGNATURE = 0x06054b50;
 
-  async function readAs(reader, offset, length, ViewType = Uint8Array) {
-    const buffer = await reader.read(offset, length);
-    return new ViewType(buffer);
+  async function readAs(reader, offset, length) {
+    return await reader.read(offset, length);
   }
 
   const crc$1 = {
@@ -710,6 +862,9 @@
 
   const utf8Decoder = new TextDecoder();
   function decodeBuffer(uint8View/*, isUTF8*/) {
+    if (isSharedArrayBuffer(uint8View.buffer)) {
+      uint8View = new Uint8Array(uint8View);
+    }
     return utf8Decoder.decode(uint8View);
     /*
     AFAICT the UTF8 flat is not set so it's 100% up to the user
@@ -963,7 +1118,8 @@
     };
   }
 
-  async function readEntryData(reader, entry) {
+  // returns an ArrayBuffer if type is falsy or a Blob of mime-type 'type'
+  async function readEntryData(reader, entry, type) {
     const buffer = await readAs(reader, entry.relativeOffsetOfLocalHeader, 30);
     // note: maybe this should be passed in or cached on entry
     // as it's async so there will be at least one tick (not sure about that)
@@ -1013,20 +1169,27 @@
     }
     const data = await readAs(reader, fileDataStart, entry.compressedSize);
     if (!decompress) {
-      return data;
+      if (type) {
+        return new Blob([data], {type});
+      }
+      return data.slice().buffer;
     }
 
-    const dst = new Uint8Array(entry.uncompressedSize);
-    inflateRaw(data, dst);
-    return dst;
+    const result = await inflateRawAsync(data, entry.uncompressedSize, type);
+    return result;
   }
 
+  function setOptions$1(options) {
+    setOptions(options);
+  }
 
-  async function open(source) {
+  async function unzipRaw(source) {
     let reader;
     if (typeof Blob !== 'undefined' && source instanceof Blob) {
       reader = new BlobReader(source);
     } else if (source instanceof ArrayBuffer || (source && source.buffer && source.buffer instanceof ArrayBuffer)) {
+      reader = new ArrayBufferReader(source);
+    } else if (isSharedArrayBuffer(source) || isSharedArrayBuffer(source.buffer)) {
       reader = new ArrayBufferReader(source);
     } else if (typeof source === 'string') {
       const req = await fetch(source);
@@ -1047,6 +1210,19 @@
     return await findEndOfCentralDirector(reader, totalLength);
   }
 
-  return open;
+  // If the names are not utf8 you should use unzipitRaw
+  async function unzip(source) {
+    const {zip, entries} = await unzipRaw(source);
+    return {
+      zip,
+      entries: Object.fromEntries(entries.map(v => [v.name, v])),
+    };
+  }
+
+  exports.setOptions = setOptions$1;
+  exports.unzip = unzip;
+  exports.unzipRaw = unzipRaw;
+
+  Object.defineProperty(exports, '__esModule', { value: true });
 
 }));
