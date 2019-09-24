@@ -1,23 +1,22 @@
 
 /* eslint-env node, mocha */
 const assert = require('chai').assert;
-const unzipit = require('../dist/unzipit.js');
+const unzip = require('../dist/unzipit.js').unzip;
 const fsPromises = require('fs').promises;
 const path = require('path');
 
-async function checkZipEntriesMatchExpected(entries, expected) {
-  assert.equal(entries.length, expected.length);
-  for (const entry of entries) {
-    const expectNdx = expected.findIndex(v => v.name === entry.name);
-    const expect = expected.splice(expectNdx, 1)[0];
-    assert.equal(entry.name, expect.name);
+async function checkZipEntriesMatchExpected(entries, expectedFiles) {
+  const expected = Object.assign({}, expectedFiles);
+  for (const [name, entry] of Object.entries(entries)) {
+    const expect = expected[name];
+    delete expected[name];
     assert.equal(entry.isDirectory, !!expect.isDir);
     if (!expect.isDir) {
       const data = await entry.text();
       assert.equal(data, expect.content);
     }
   }
-  assert.equal(expected.length, 0);
+  assert.deepEqual(expected, {}, 'all content accounted for');
 }
 
 class StatelessFileReader {
@@ -66,49 +65,35 @@ class FileReader {
 }
 
 describe('unzipit', function() {
+
+  const longContent = `${new Array(200).fill('compress').join('')}\n`;
+  const expectedStuff = {
+    'stuff/': { isDir: true, },
+    'stuff/dog.txt': { content: 'german shepard\n' },
+    'stuff/birds/': { isDir: true, },
+    'stuff/birds/bird.txt': { content: 'parrot\n' },
+    'stuff/cat.txt': { content: 'siamese\n', },
+    'stuff/json.txt': { content: '{"name":"homer","age":50}', },
+    'stuff/long.txt': { content: longContent, },
+    'stuff/ⓤⓝⓘⓒⓞⓓⓔ-𝖋𝖎𝖑𝖊𝖓𝖆𝖒𝖊-😱.txt': { content: 'Lookma! Unicode 😜', },
+  };
+
   it('entries are correct', async() => {
     const buf = await fsPromises.readFile(path.join(__dirname, 'data', 'stuff.zip'));
-    const {entries} = await unzipit(new Uint8Array(buf));
-    const expected = [
-      { name: 'stuff/', isDir: true, },
-      { name: 'stuff/dog.txt', content: 'german shepard\n' },
-      { name: 'stuff/birds/', isDir: true, },
-      { name: 'stuff/birds/bird.txt', content: 'parrot\n' },
-      { name: 'stuff/cat.txt', content: 'siamese\n', },
-      { name: 'stuff/long.txt', content: `${new Array(200).fill('compress').join('')}\n`, },
-      { name: 'stuff/ⓤⓝⓘⓒⓞⓓⓔ-𝖋𝖎𝖑𝖊𝖓𝖆𝖒𝖊-😱.txt', content: 'Lookma! Unicode 😜', },
-    ];
-    await checkZipEntriesMatchExpected(entries, expected);
+    const {entries} = await unzip(new Uint8Array(buf));
+    await checkZipEntriesMatchExpected(entries, expectedStuff);
   });
 
   it('use StatelessFileReader', async() => {
     const reader = new StatelessFileReader(path.join(__dirname, 'data', 'stuff.zip'));
-    const {entries} = await unzipit(reader);
-    const expected = [
-      { name: 'stuff/', isDir: true, },
-      { name: 'stuff/dog.txt', content: 'german shepard\n' },
-      { name: 'stuff/birds/', isDir: true, },
-      { name: 'stuff/birds/bird.txt', content: 'parrot\n' },
-      { name: 'stuff/cat.txt', content: 'siamese\n', },
-      { name: 'stuff/long.txt', content: `${new Array(200).fill('compress').join('')}\n`, },
-      { name: 'stuff/ⓤⓝⓘⓒⓞⓓⓔ-𝖋𝖎𝖑𝖊𝖓𝖆𝖒𝖊-😱.txt', content: 'Lookma! Unicode 😜', },
-    ];
-    await checkZipEntriesMatchExpected(entries, expected);
+    const {entries} = await unzip(reader);
+    await checkZipEntriesMatchExpected(entries, expectedStuff);
   });
 
   it('use FileReader', async() => {
     const reader = new FileReader(path.join(__dirname, 'data', 'stuff.zip'));
-    const {entries} = await unzipit(reader);
-    const expected = [
-      { name: 'stuff/', isDir: true, },
-      { name: 'stuff/dog.txt', content: 'german shepard\n' },
-      { name: 'stuff/birds/', isDir: true, },
-      { name: 'stuff/birds/bird.txt', content: 'parrot\n' },
-      { name: 'stuff/cat.txt', content: 'siamese\n', },
-      { name: 'stuff/long.txt', content: `${new Array(200).fill('compress').join('')}\n`, },
-      { name: 'stuff/ⓤⓝⓘⓒⓞⓓⓔ-𝖋𝖎𝖑𝖊𝖓𝖆𝖒𝖊-😱.txt', content: 'Lookma! Unicode 😜', },
-    ];
-    await checkZipEntriesMatchExpected(entries, expected);
+    const {entries} = await unzip(reader);
+    await checkZipEntriesMatchExpected(entries, expectedStuff);
     reader.close();
   });
 });

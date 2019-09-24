@@ -18,14 +18,12 @@ describe('BlobReader', function() {
     });
 
     it('should work at 0 offset', async() => {
-      const data = await reader.read(0, 3);
-      const view = new Uint8Array(data);
+      const view = await reader.read(0, 3);
       assert.deepEqual(view, new Uint8Array([11, 22, 33]));
     });
 
     it('should work at non 0 offset', async() => {
-      const data = await reader.read(97, 3);
-      const view = new Uint8Array(data);
+      const view = await reader.read(97, 3);
       assert.deepEqual(view, new Uint8Array([44, 55, 66]));
     });
   });

@@ -27,6 +27,11 @@ describe('ArrayBufferReader', function() {
       const view = new Uint8Array(data);
       assert.deepEqual(view, new Uint8Array([44, 55, 66]));
     });
+
+    it('should be the same ArrayBuffer', async() => {
+      const data = await reader.read(97, 3);
+      assert.strictEqual(data.buffer, ab);
+    });
   });
 
   describe('typedArray', function() {
@@ -43,14 +48,19 @@ describe('ArrayBufferReader', function() {
 
     it('should work at 0 offset', async() => {
       const data = await reader.read(0, 12);
-      const view = new Float32Array(data);
+      const view = new Float32Array(data.buffer, data.byteOffset, data.length / 4);
       assert.deepEqual(view, new Float32Array([11, 22, 33]));
     });
 
     it('should work at non 0 offset', async() => {
       const data = await reader.read(100 - 12, 12);
-      const view = new Float32Array(data);
+      const view = new Float32Array(data.buffer, data.byteOffset, data.length / 4);
       assert.deepEqual(view, new Float32Array([44, 55, 66]));
+    });
+
+    it('should be the same ArrayBuffer', async() => {
+      const data = await reader.read(97, 3);
+      assert.strictEqual(data.buffer, ab);
     });
   });
 });

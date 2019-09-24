@@ -1,11 +1,11 @@
 
 import {inflateRaw} from 'uzip-module';
-import {isBlob} from './utils.js';
+import {isBlob, isSharedArrayBuffer} from './utils.js';
 
 const config = {
   numWorkers: 1,
   workerURL: '',
-  useWorkers: true,
+  useWorkers: false,
 };
 
 let nextId = 0;
@@ -62,9 +62,9 @@ function processWaitingForWorkerQueue() {
     const {id, src, uncompressedSize, type, resolve, reject} = waitingForWorkerQueue.shift();
     currentlyProcessingIdToRequestMap.set(id, {id, resolve, reject});
     const transferables = [];
-    if (!isBlob(src)) {
-      transferables.push(src);
-    }
+    //if (!isBlob(src) && !isSharedArrayBuffer(src)) {
+    //  transferables.push(src);
+    //}
     worker.postMessage({
       type: 'inflate',
       data: {
@@ -78,8 +78,12 @@ function processWaitingForWorkerQueue() {
 }
 
 export function setOptions(options) {
-  config.useWorkers = options.useWorkers !== undefined ? options.useWorkers : config.useWorkers;
   config.workerURL = options.workerURL || config.workerURL;
+  // there's no reason to set the workerURL if you're not going to use workers
+  if (options.workerURL) {
+    config.useWorkers = true;
+  }
+  config.useWorkers = options.useWorkers !== undefined ? options.useWorkers : config.useWorkers;
   config.numWorkers = options.numWorkers || config.numWorkers;
 }
 
@@ -97,12 +101,29 @@ export function setOptions(options) {
 // since the worker can transfer its ArrayBuffer zero copy.
 export function inflateRawAsync(src, uncompressedSize, type) {
   return new Promise((resolve, reject) => {
+    // note: there is potential an expensive copy here. In order for the data
+    // to make it into the worker we need to copy the data to the worker unless
+    // it's a Blob or a SharedArrayBuffer.
+    //
+    // Solutions:
+    //
+    // 1. A minor enhancement, if `uncompressedSize` is small don't call the worker.
+    //
+    //    might be a win period as their is overhead calling the worker
+    //
+    // 2. Move the entire library to the worker
+    //
+    //    Good, Maybe faster if you pass a URL, Blob, or SharedArrayBuffer? Not sure about that
+    //    as those are also easy to transfer. Still slow if you pass an ArrayBuffer
+    //    as the ArrayBuffer has to be copied to the worker.
+    //
+    // I guess benchmarking is really the only thing to try.
     if (config.useWorkers) {
       waitingForWorkerQueue.push({src, uncompressedSize, type, resolve, reject, id: nextId++});
       processWaitingForWorkerQueue();
     } else {
       const dst = new Uint8Array(uncompressedSize);
-      inflateRaw(new Uint8Array(src), dst);
+      inflateRaw(src, dst);
       resolve(type
          ? new Blob([dst], {type})
          : dst.buffer);

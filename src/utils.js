@@ -1,3 +1,5 @@
+/* global SharedArrayBuffer */
+
 export function readBlobAsArrayBuffer(blob) {
   if (blob.arrayBuffer) {
     return blob.arrayBuffer();
@@ -13,5 +15,9 @@ export function readBlobAsArrayBuffer(blob) {
 }
 
 export function isBlob(v) {
-  return typeof Blob !== undefined && v instanceof Blob;
+  return typeof Blob !== 'undefined' && v instanceof Blob;
+}
+
+export function isSharedArrayBuffer(b) {
+  return typeof SharedArrayBuffer !== 'undefined' && b instanceof SharedArrayBuffer;
 }

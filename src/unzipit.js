@@ -1,6 +1,8 @@
 import ArrayBufferReader from './ArrayBufferReader.js';
 import BlobReader from './BlobReader.js';
 import {inflateRawAsync, setOptions as setWorkerOptions} from './inflate.js';
+import {isSharedArrayBuffer} from './utils.js';
+
 /*
 class Zip {
   constructor(reader) {
@@ -61,9 +63,8 @@ const EOCDR_WITHOUT_COMMENT_SIZE = 22;
 const MAX_COMMENT_SIZE = 0xffff; // 2-byte size
 const EOCDR_SIGNATURE = 0x06054b50;
 
-async function readAs(reader, offset, length, ViewType = Uint8Array) {
-  const buffer = await reader.read(offset, length);
-  return new ViewType(buffer);
+async function readAs(reader, offset, length) {
+  return await reader.read(offset, length);
 }
 
 const crc = {
@@ -101,6 +102,9 @@ function getUint64LE(uint8View, offset) {
 
 const utf8Decoder = new TextDecoder();
 function decodeBuffer(uint8View/*, isUTF8*/) {
+  if (isSharedArrayBuffer(uint8View.buffer)) {
+    uint8View = new Uint8Array(uint8View);
+  }
   return utf8Decoder.decode(uint8View);
   /*
   AFAICT the UTF8 flat is not set so it's 100% up to the user
@@ -411,10 +415,10 @@ async function readEntryData(reader, entry, type) {
     if (type) {
       return new Blob([data], {type});
     }
-    return data;
+    return data.slice().buffer;
   }
 
-  const result = await inflateRawAsync(data.buffer, entry.uncompressedSize, type);
+  const result = await inflateRawAsync(data, entry.uncompressedSize, type);
   return result;
 }
 
@@ -422,11 +426,13 @@ export function setOptions(options) {
   setWorkerOptions(options);
 }
 
-export async function unzipit(source) {
+export async function unzipRaw(source) {
   let reader;
   if (typeof Blob !== 'undefined' && source instanceof Blob) {
     reader = new BlobReader(source);
   } else if (source instanceof ArrayBuffer || (source && source.buffer && source.buffer instanceof ArrayBuffer)) {
+    reader = new ArrayBufferReader(source);
+  } else if (isSharedArrayBuffer(source) || isSharedArrayBuffer(source.buffer)) {
     reader = new ArrayBufferReader(source);
   } else if (typeof source === 'string') {
     const req = await fetch(source);
@@ -445,4 +451,13 @@ export async function unzipit(source) {
   }
 
   return await findEndOfCentralDirector(reader, totalLength);
+}
+
+// If the names are not utf8 you should use unzipitRaw
+export async function unzip(source) {
+  const {zip, entries} = await unzipRaw(source);
+  return {
+    zip,
+    entries: Object.fromEntries(entries.map(v => [v.name, v])),
+  };
 }
