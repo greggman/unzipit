@@ -1,4 +1,4 @@
-/* unzipit@0.1.0, license MIT */
+/* unzipit@0.1.1, license MIT */
 (function (factory) {
   typeof define === 'function' && define.amd ? define(factory) :
   factory();
@@ -591,16 +591,41 @@
     return typeof Blob !== 'undefined' && v instanceof Blob;
   }
 
-  // note: we only workerize the inflate portion.
+  /* global process, require */
+
+  // note: we only handle the inflate portion in a worker
   // every other part is already async and JavaScript
   // is non blocking. I suppose if you had a million entry
   // zip file then the loop going through the directory
   // might take time but that's an unlikely situation.
 
+  const msgHelper = (function() {
+    const isNode = (typeof process !== 'undefined') &&
+                   (typeof process.versions.node !== 'undefined');
+    if (isNode) {
+      const { parentPort } = require('worker_threads');
+
+      return {
+        postMessage: parentPort.postMessage.bind(parentPort),
+        addEventListener: parentPort.on.bind(parentPort),
+      };
+    } else {
+      return {
+        postMessage: self.postMessage.bind(self),
+        addEventListener(type, fn) {
+          self.addEventListener(type, (e) => {
+            fn(e.data);
+          });
+        },
+      };
+    }
+  }());
+
   // class InflateRequest {
   //   id: string,
-  //   data: arraybuffer, sharedarraybuffer, blob
-  //   uncompressedSize: // can be undefined
+  //   src: ArrayBuffer, SharedArrayBuffer, blob
+  //   uncompressedSize: number,
+  //   type: string or undefined
   // }
   //
   // Do we need to throttle? If you send 50 requests and they are each blobs
@@ -626,13 +651,13 @@
         data = dstData.buffer;
         transferables.push(data);
       }
-      self.postMessage({
+      msgHelper.postMessage({
         id,
         data,
       }, transferables);
     } catch (e) {
       console.error(e);
-      self.postMessage({
+      msgHelper.postMessage({
         id,
         error: `${e.toString()}`,
       });
@@ -643,13 +668,13 @@
     inflate: inflate$1,
   };
 
-  self.onmessage = function(e) {
-    const {type, data} = e.data;
+  msgHelper.addEventListener('message', function(e) {
+    const {type, data} = e;
     const fn = handlers[type];
     if (!fn) {
       throw new Error('no handler for type: ' + type);
     }
     fn(data);
-  };
+  });
 
 }));

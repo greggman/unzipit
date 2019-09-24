@@ -1,4 +1,4 @@
-/* unzipit@0.1.0, license MIT */
+/* unzipit@0.1.1, license MIT */
 /* global SharedArrayBuffer */
 
 function readBlobAsArrayBuffer(blob) {
@@ -614,6 +614,8 @@ const crc = {
 
 function inflateRaw(file, buf) {  return F.inflate(file, buf);  }
 
+/* global process, require */
+
 const config = {
   numWorkers: 1,
   workerURL: '',
@@ -654,11 +656,44 @@ function handleResult(e) {
   }
 }
 
+const workerHelper = (function() {
+  const isNode = (typeof process !== 'undefined') &&
+                 (typeof process.versions.node !== 'undefined');
+  if (isNode) {
+    const {Worker} = require('worker_threads');
+    return {
+      createWorker(url) {
+        return new Worker(url);
+      },
+      addEventListener(worker, fn) {
+        worker.on('message', (data) => {
+          fn({target: worker, data});
+        });
+      },
+      async terminate(worker) {
+        await worker.terminate();
+      },
+    };
+  } else {
+    return {
+      createWorker(url) {
+        return new Worker(url);
+      },
+      addEventListener(worker, fn) {
+        worker.addEventListener('message', fn);
+      },
+      async terminate(worker) {
+        worker.terminate();
+      },
+    };
+  }
+}());
+
 function getAvailableWorker() {
   if (availableWorkers.length === 0 && numWorkers < config.numWorkers) {
     ++numWorkers;
-    const worker = new Worker(config.workerURL);
-    worker.onmessage = handleResult;
+    const worker = workerHelper.createWorker(config.workerURL);
+    workerHelper.addEventListener(worker, handleResult);
     availableWorkers.push(worker);
   }
   return availableWorkers.pop();
@@ -755,6 +790,12 @@ function inflateRawAsync(src, uncompressedSize, type) {
          : dst.buffer);
     }
   });
+}
+
+async function cleanup() {
+  for (const worker of availableWorkers) {
+    await workerHelper.terminate(worker);
+  }
 }
 
 /*
@@ -1164,7 +1205,7 @@ async function readEntryData(reader, entry, type) {
   const data = await readAs(reader, fileDataStart, entry.compressedSize);
   if (!decompress) {
     if (type) {
-      return new Blob([data], {type});
+      return new Blob([isSharedArrayBuffer(data.buffer) ? new Uint8Array(data) : data], {type});
     }
     return data.slice().buffer;
   }
@@ -1213,4 +1254,8 @@ async function unzip(source) {
   };
 }
 
-export { setOptions$1 as setOptions, unzip, unzipRaw };
+function cleanup$1() {
+  cleanup(); 
+}
+
+export { cleanup$1 as cleanup, setOptions$1 as setOptions, unzip, unzipRaw };

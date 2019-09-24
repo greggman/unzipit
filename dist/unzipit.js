@@ -1,4 +1,4 @@
-/* unzipit@0.1.0, license MIT */
+/* unzipit@0.1.1, license MIT */
 (function (global, factory) {
   typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
   typeof define === 'function' && define.amd ? define(['exports'], factory) :
@@ -620,6 +620,8 @@
 
   function inflateRaw(file, buf) {  return F.inflate(file, buf);  }
 
+  /* global process, require */
+
   const config = {
     numWorkers: 1,
     workerURL: '',
@@ -660,11 +662,44 @@
     }
   }
 
+  const workerHelper = (function() {
+    const isNode = (typeof process !== 'undefined') &&
+                   (typeof process.versions.node !== 'undefined');
+    if (isNode) {
+      const {Worker} = require('worker_threads');
+      return {
+        createWorker(url) {
+          return new Worker(url);
+        },
+        addEventListener(worker, fn) {
+          worker.on('message', (data) => {
+            fn({target: worker, data});
+          });
+        },
+        async terminate(worker) {
+          await worker.terminate();
+        },
+      };
+    } else {
+      return {
+        createWorker(url) {
+          return new Worker(url);
+        },
+        addEventListener(worker, fn) {
+          worker.addEventListener('message', fn);
+        },
+        async terminate(worker) {
+          worker.terminate();
+        },
+      };
+    }
+  }());
+
   function getAvailableWorker() {
     if (availableWorkers.length === 0 && numWorkers < config.numWorkers) {
       ++numWorkers;
-      const worker = new Worker(config.workerURL);
-      worker.onmessage = handleResult;
+      const worker = workerHelper.createWorker(config.workerURL);
+      workerHelper.addEventListener(worker, handleResult);
       availableWorkers.push(worker);
     }
     return availableWorkers.pop();
@@ -761,6 +796,12 @@
            : dst.buffer);
       }
     });
+  }
+
+  async function cleanup() {
+    for (const worker of availableWorkers) {
+      await workerHelper.terminate(worker);
+    }
   }
 
   /*
@@ -1170,7 +1211,7 @@
     const data = await readAs(reader, fileDataStart, entry.compressedSize);
     if (!decompress) {
       if (type) {
-        return new Blob([data], {type});
+        return new Blob([isSharedArrayBuffer(data.buffer) ? new Uint8Array(data) : data], {type});
       }
       return data.slice().buffer;
     }
@@ -1219,6 +1260,11 @@
     };
   }
 
+  function cleanup$1() {
+    cleanup(); 
+  }
+
+  exports.cleanup = cleanup$1;
   exports.setOptions = setOptions$1;
   exports.unzip = unzip;
   exports.unzipRaw = unzipRaw;
