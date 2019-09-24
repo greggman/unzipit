@@ -1,4 +1,5 @@
 
+import {inflateRaw} from 'uzip-module';
 import {isBlob} from './utils.js';
 
 const config = {
@@ -77,6 +78,7 @@ function processWaitingForWorkerQueue() {
 }
 
 export function setOptions(options) {
+  config.useWorkers = options.useWorkers !== undefined ? options.useWorkers : config.useWorkers;
   config.workerURL = options.workerURL || config.workerURL;
   config.numWorkers = options.numWorkers || config.numWorkers;
 }
@@ -93,9 +95,17 @@ export function setOptions(options) {
 //
 // Conversely if you want the data itself then you want an ArrayBuffer immediately
 // since the worker can transfer its ArrayBuffer zero copy.
-export function inflateRaw(src, uncompressedSize, type) {
+export function inflateRawAsync(src, uncompressedSize, type) {
   return new Promise((resolve, reject) => {
-    waitingForWorkerQueue.push({src, uncompressedSize, type, resolve, reject, id: nextId++});
-    processWaitingForWorkerQueue();
+    if (config.useWorkers) {
+      waitingForWorkerQueue.push({src, uncompressedSize, type, resolve, reject, id: nextId++});
+      processWaitingForWorkerQueue();
+    } else {
+      const dst = new Uint8Array(uncompressedSize);
+      inflateRaw(new Uint8Array(src), dst);
+      resolve(type
+         ? new Blob([dst], {type})
+         : dst.buffer);
+    }
   });
 }

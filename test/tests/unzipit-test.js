@@ -1,10 +1,9 @@
-/* global chai, describe, it */
+/* global chai, describe, it, before */
 const assert = chai.assert;
 
 import {unzipit, setOptions} from '../../dist/unzipit.module.js';
 import {readBlobAsArrayBuffer} from '../../src/utils.js';
 
-setOptions({workerURL: '../../dist/unzipit-worker.module.js'});
 
 async function readBlobAsUint8Array(blob) {
   const arrayBuffer = await readBlobAsArrayBuffer(blob);
@@ -12,20 +11,59 @@ async function readBlobAsUint8Array(blob) {
 }
 
 describe('unzipit', function() {
-  describe('url', function() {
 
-    const utf8Encoder = new TextEncoder();
-    const longContent = `${new Array(200).fill('compress').join('')}\n`;
-    const expectedStuff = [
-      { name: 'stuff/', isDir: true, },
-      { name: 'stuff/dog.txt', content: 'german shepard\n' },
-      { name: 'stuff/birds/', isDir: true, },
-      { name: 'stuff/birds/bird.txt', content: 'parrot\n' },
-      { name: 'stuff/cat.txt', content: 'siamese\n', },
-      { name: 'stuff/json.txt', content: '{"name":"homer","age":50}', },
-      { name: 'stuff/long.txt', content: longContent, },
-      { name: 'stuff/ⓤⓝⓘⓒⓞⓓⓔ-𝖋𝖎𝖑𝖊𝖓𝖆𝖒𝖊-😱.txt', content: 'Lookma! Unicode 😜', },
-    ];
+  const utf8Encoder = new TextEncoder();
+  const longContent = `${new Array(200).fill('compress').join('')}\n`;
+  const expectedStuff = [
+    { name: 'stuff/', isDir: true, },
+    { name: 'stuff/dog.txt', content: 'german shepard\n' },
+    { name: 'stuff/birds/', isDir: true, },
+    { name: 'stuff/birds/bird.txt', content: 'parrot\n' },
+    { name: 'stuff/cat.txt', content: 'siamese\n', },
+    { name: 'stuff/json.txt', content: '{"name":"homer","age":50}', },
+    { name: 'stuff/long.txt', content: longContent, },
+    { name: 'stuff/ⓤⓝⓘⓒⓞⓓⓔ-𝖋𝖎𝖑𝖊𝖓𝖆𝖒𝖊-😱.txt', content: 'Lookma! Unicode 😜', },
+  ];
+
+  async function checkZipEntriesMatchExpected(entries, expectedFiles) {
+    const expected = expectedFiles.slice();
+    assert.equal(entries.length, expected.length);
+    for (const entry of entries) {
+      const expectNdx = expected.findIndex(v => v.name === entry.name);
+      const expect = expected.splice(expectNdx, 1)[0];
+      assert.equal(entry.name, expect.name);
+      assert.equal(entry.isDirectory, !!expect.isDir);
+      if (!expect.isDir) {
+        const data = await entry.text();
+        assert.equal(data, expect.content);
+      }
+    }
+    assert.equal(expected.length, 0);
+  }
+
+  describe('without workers', function() {
+    before(() => {
+      setOptions({
+        workerURL: '../../dist/unzipit-worker.module.js',
+        useWorkers: false,
+      });
+    });
+
+    it('entries are correct', async() => {
+      const {entries} = await unzipit('./data/stuff.zip');
+      await checkZipEntriesMatchExpected(entries, expectedStuff);
+    });
+
+  });
+
+  describe('with workers', function() {
+
+    before(() => {
+      setOptions({
+        workerURL: '../../dist/unzipit-worker.module.js',
+        useWorkers: true,
+      });
+    });
 
     it('has all entries', async() => {
       const {zip, entries} = await unzipit('./data/stuff.zip');
@@ -34,22 +72,6 @@ describe('unzipit', function() {
       assert.instanceOf(zip.commentBytes, Uint8Array);
       assert.equal(entries.length, expectedStuff.length);
     });
-
-    async function checkZipEntriesMatchExpected(entries, expectedFiles) {
-      const expected = expectedFiles.slice();
-      assert.equal(entries.length, expected.length);
-      for (const entry of entries) {
-        const expectNdx = expected.findIndex(v => v.name === entry.name);
-        const expect = expected.splice(expectNdx, 1)[0];
-        assert.equal(entry.name, expect.name);
-        assert.equal(entry.isDirectory, !!expect.isDir);
-        if (!expect.isDir) {
-          const data = await entry.text();
-          assert.equal(data, expect.content);
-        }
-      }
-      assert.equal(expected.length, 0);
-    }
 
     it('entries are correct', async() => {
       const {entries} = await unzipit('./data/stuff.zip');

@@ -1,6 +1,6 @@
 import ArrayBufferReader from './ArrayBufferReader.js';
 import BlobReader from './BlobReader.js';
-import {inflateRaw, setOptions as setWorkerOptions} from './inflate.js';
+import {inflateRawAsync, setOptions as setWorkerOptions} from './inflate.js';
 /*
 class Zip {
   constructor(reader) {
@@ -414,7 +414,7 @@ async function readEntryData(reader, entry, type) {
     return data;
   }
 
-  const result = await inflateRaw(data.buffer, entry.uncompressedSize, type);
+  const result = await inflateRawAsync(data.buffer, entry.uncompressedSize, type);
   return result;
 }
 
