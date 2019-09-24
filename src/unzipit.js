@@ -467,5 +467,5 @@ export async function unzip(source) {
 }
 
 export function cleanup() {
-  cleanupInflate(); 
+  cleanupInflate();
 }

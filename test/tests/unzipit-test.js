@@ -162,7 +162,7 @@ describe('unzipit', function() {
   describe('url', async() => {
 
     addTopTests({
-      async loadStuffZip() { 
+      async loadStuffZip() {
         return await unzip('./data/stuff.zip');
       },
       async loadStuffZipRaw() {
@@ -191,7 +191,7 @@ describe('unzipit', function() {
     });
 
     addTopTests({
-      async loadStuffZip() { 
+      async loadStuffZip() {
         return await unzip(stuffZipArrayBuffer);
       },
       async loadStuffZipRaw() {
@@ -220,7 +220,7 @@ describe('unzipit', function() {
     });
 
     addTopTests({
-      async loadStuffZip() { 
+      async loadStuffZip() {
         return await unzip(stuffZipArrayBlob);
       },
       async loadStuffZipRaw() {
@@ -255,7 +255,7 @@ describe('unzipit', function() {
       });
 
       addTopTests({
-        async loadStuffZip() { 
+        async loadStuffZip() {
           return await unzip(stuffZipSharedArrayBuffer);
         },
         async loadStuffZipRaw() {
