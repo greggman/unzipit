@@ -1,16 +1,41 @@
+/* global process, require */
+
 import {inflateRaw} from 'uzip-module';
 import {readBlobAsArrayBuffer, isBlob} from './utils.js';
 
-// note: we only workerize the inflate portion.
+// note: we only handle the inflate portion in a worker
 // every other part is already async and JavaScript
 // is non blocking. I suppose if you had a million entry
 // zip file then the loop going through the directory
 // might take time but that's an unlikely situation.
 
+const msgHelper = (function() {
+  const isNode = (typeof process !== 'undefined') &&
+                 (typeof process.versions.node !== 'undefined');
+  if (isNode) {
+    const { parentPort } = require('worker_threads');
+
+    return {
+      postMessage: parentPort.postMessage.bind(parentPort),
+      addEventListener: parentPort.on.bind(parentPort),
+    };
+  } else {
+    return {
+      postMessage: self.postMessage.bind(self),
+      addEventListener(type, fn) {
+        self.addEventListener(type, (e) => {
+          fn(e.data);
+        });
+      },
+    };
+  }
+}());
+
 // class InflateRequest {
 //   id: string,
-//   data: arraybuffer, sharedarraybuffer, blob
-//   uncompressedSize: // can be undefined
+//   src: ArrayBuffer, SharedArrayBuffer, blob
+//   uncompressedSize: number,
+//   type: string or undefined
 // }
 //
 // Do we need to throttle? If you send 50 requests and they are each blobs
@@ -36,13 +61,13 @@ async function inflate(req) {
       data = dstData.buffer;
       transferables.push(data);
     }
-    self.postMessage({
+    msgHelper.postMessage({
       id,
       data,
     }, transferables);
   } catch (e) {
     console.error(e);
-    self.postMessage({
+    msgHelper.postMessage({
       id,
       error: `${e.toString()}`,
     });
@@ -53,11 +78,11 @@ const handlers = {
   inflate,
 };
 
-self.onmessage = function(e) {
-  const {type, data} = e.data;
+msgHelper.addEventListener('message', function(e) {
+  const {type, data} = e;
   const fn = handlers[type];
   if (!fn) {
     throw new Error('no handler for type: ' + type);
   }
   fn(data);
-};
+});

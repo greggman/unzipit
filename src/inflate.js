@@ -1,3 +1,4 @@
+/* global process, require */
 
 import {inflateRaw} from 'uzip-module';
 
@@ -41,11 +42,44 @@ function handleResult(e) {
   }
 }
 
+const workerHelper = (function() {
+  const isNode = (typeof process !== 'undefined') &&
+                 (typeof process.versions.node !== 'undefined');
+  if (isNode) {
+    const {Worker} = require('worker_threads');
+    return {
+      createWorker(url) {
+        return new Worker(url);
+      },
+      addEventListener(worker, fn) {
+        worker.on('message', (data) => {
+          fn({target: worker, data});
+        });
+      },
+      async terminate(worker) {
+        await worker.terminate();
+      },
+    };
+  } else {
+    return {
+      createWorker(url) {
+        return new Worker(url);
+      },
+      addEventListener(worker, fn) {
+        worker.addEventListener('message', fn);
+      },
+      async terminate(worker) {
+        worker.terminate();
+      },
+    };
+  }
+}());
+
 function getAvailableWorker() {
   if (availableWorkers.length === 0 && numWorkers < config.numWorkers) {
     ++numWorkers;
-    const worker = new Worker(config.workerURL);
-    worker.onmessage = handleResult;
+    const worker = workerHelper.createWorker(config.workerURL);
+    workerHelper.addEventListener(worker, handleResult);
     availableWorkers.push(worker);
   }
   return availableWorkers.pop();
@@ -142,4 +176,10 @@ export function inflateRawAsync(src, uncompressedSize, type) {
          : dst.buffer);
     }
   });
+}
+
+export async function cleanup() {
+  for (const worker of availableWorkers) {
+    await workerHelper.terminate(worker);
+  }
 }

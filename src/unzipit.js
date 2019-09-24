@@ -1,6 +1,10 @@
 import ArrayBufferReader from './ArrayBufferReader.js';
 import BlobReader from './BlobReader.js';
-import {inflateRawAsync, setOptions as setWorkerOptions} from './inflate.js';
+import {
+  inflateRawAsync,
+  setOptions as setWorkerOptions,
+  cleanup as cleanupInflate,
+} from './inflate.js';
 import {isSharedArrayBuffer} from './utils.js';
 
 /*
@@ -460,4 +464,8 @@ export async function unzip(source) {
     zip,
     entries: Object.fromEntries(entries.map(v => [v.name, v])),
   };
+}
+
+export function cleanup() {
+  cleanupInflate(); 
 }
