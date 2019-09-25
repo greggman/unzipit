@@ -1,3 +1,7 @@
+#!/usr/bin/env node
+
+/* global require, __dirname */
+
 const puppeteer = require('puppeteer');
 const path = require('path');
 const express = require('express');
@@ -14,23 +18,22 @@ async function test(port) {
   const browser = await puppeteer.launch();
   const page = await browser.newPage();
 
-  page.on("console", msg => console.log(msg.text()));
+  page.on('console', (msg) => {
+    // Total Hack!
+    console.log(...msg.args().map(v => v.toString().substr(9)));
+  });
 
   // Get the "viewport" of the page, as reported by the page.
-  page.on('domcontentloaded', async () => {
-    const resultsJSON = await page.evaluate(() => {
+  page.on('domcontentloaded', async() => {
+    const failures = await page.evaluate(() => {
       return window.testsPromiseInfo.promise;
     });
-
-    console.log(resultsJSON);
 
     await browser.close();
     server.close();
 
-    const results = JSON.parse(resultsJSON);
-
-    process.exit((results.failures || results.pending) ? 1 : 0);
+    process.exit(failures ? 1 : 0);  // eslint-disable-line
   });
 
-  await page.goto(`http://localhost:${port}/test/index.html?reporter=json`);
+  await page.goto(`http://localhost:${port}/test/index.html?reporter=spec`);
 }
