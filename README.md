@@ -2,6 +2,9 @@
 
 Random access unzip library for browser and node based JavaScript
 
+[![Build Status](https://travis-ci.org/greggman/unzipit.svg?branch=master)](https://travis-ci.org/greggman/unzipit)
+
+
 # How to use
 
 ## without workers
