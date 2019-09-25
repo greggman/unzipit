@@ -7,7 +7,7 @@
   "scripts": {
     "build": "rollup -c",
     "eslint": "eslint src/**/*.js test/tests/**/*.js",
-    "test": "mocha test/node-test.js && node test/puppeteer.notjs"
+    "test": "mocha test/node-test.js && node test/puppeteer.js"
   },
   "files": [
     "dist/**"
