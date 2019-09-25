@@ -7,6 +7,12 @@
     {
       "type": "node",
       "request": "launch",
+      "name": "Puppeteer",
+      "program": "${workspaceRoot}/test/puppeteer.notjs"
+    },
+    {
+      "type": "node",
+      "request": "launch",
       "name": "Mocha Node",
       "program": "${workspaceRoot}/node_modules/.bin/mocha",
       "args": [
