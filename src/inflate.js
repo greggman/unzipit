@@ -18,6 +18,13 @@ let nextId = 0;
 // do. You don't know which will finish first. If you give
 // the worker with more work to do the request then you'll
 // waste time.
+
+// note: we can't check `workers.length` for deciding if
+// we've reached `config.numWorkers` because creation the worker
+// is async which means other requests to make workers might
+// come in before a worker gets added to `workers`
+let numWorkers = 0;
+let canUseWorkers = true;   // gets set to false if we can't start a worker
 const workers = [];
 const availableWorkers = [];
 const waitingForWorkerQueue = [];
@@ -42,7 +49,7 @@ const workerHelper = (function() {
   if (isNode) {
     const {Worker} = require('worker_threads');
     return {
-      createWorker(url) {
+      async createWorker(url) {
         return new Worker(url);
       },
       addEventListener(worker, fn) {
@@ -56,8 +63,45 @@ const workerHelper = (function() {
     };
   } else {
     return {
-      createWorker(url) {
-        return new Worker(url);
+      async createWorker(url) {
+        // I don't understand this security issue
+        // Apparently there is some iframe setting or http header
+        // that prevents cross domain workers. But, I can manually
+        // download the text and do it. I reported this to Chrome
+        // and they said it was fine so ¯\_(ツ)_/¯
+        try {
+          const worker = new Worker(url);
+          return worker;
+        } catch (e) {
+          console.warn('could not load worker:', url);
+        }
+
+        let text;
+        try {
+          const req = await fetch(url);
+          const text = await req.text();
+          url = URL.createObjectURL(new Blob([text], {type: 'application/javascript'}));
+          const worker = new Worker(url);
+          config.workerURL = url;  // this is a hack. What's a better way to structure this code?
+          return worker;
+        } catch (e) {
+          console.warn('could not load worker via fetch:', url);
+        }
+
+        if (text !== undefined) {
+          try {
+            url = `data:application/javascript;base64,${btoa(text)}`;
+            const worker = new Worker(url);
+            config.workerURL = url;
+            return worker;
+          } catch (e) {
+            console.warn('could not load worker via dataURI');
+          }
+        }
+
+        console.warn('workers will not be used');
+        canUseWorkers = false;
+        return undefined;
       },
       addEventListener(worker, fn) {
         worker.addEventListener('message', fn);
@@ -69,53 +113,77 @@ const workerHelper = (function() {
   }
 }());
 
-function getAvailableWorker() {
-  if (availableWorkers.length === 0 && workers.length < config.numWorkers) {
-    const worker = workerHelper.createWorker(config.workerURL);
-    workers.push(worker);
-    workerHelper.addEventListener(worker, handleResult);
-    availableWorkers.push(worker);
+async function getAvailableWorker() {
+  if (availableWorkers.length === 0 && numWorkers < config.numWorkers) {
+    ++numWorkers;  // see comment at numWorkers declaration
+    try {
+      const worker = await workerHelper.createWorker(config.workerURL);
+      workers.push(worker);
+      availableWorkers.push(worker);
+      workerHelper.addEventListener(worker, handleResult);
+    } catch (e) {
+      // set this global out-of-band (needs refactor)
+      canUseWorkers = false;
+    }
   }
   return availableWorkers.pop();
 }
 
-function processWaitingForWorkerQueue() {
+function inflateRawLocal(src, uncompressedSize, type, resolve) {
+  const dst = new Uint8Array(uncompressedSize);
+  inflateRaw(src, dst);
+  resolve(type
+     ? new Blob([dst], {type})
+     : dst.buffer);
+}
+
+async function processWaitingForWorkerQueue() {
   if (waitingForWorkerQueue.length === 0) {
     return;
   }
 
-  const worker = getAvailableWorker();
-  if (worker) {
-    const {id, src, uncompressedSize, type, resolve, reject} = waitingForWorkerQueue.shift();
-    currentlyProcessingIdToRequestMap.set(id, {id, resolve, reject});
-    const transferables = [];
-    // NOTE: Originally I thought you could transfer an ArrayBuffer
-    // the code on this side is often using views into the entire file
-    // which means if we transferred we'd lose the entire file. That sucks
-    // because it means there's an expensive copy to send the uncompressed
-    // data to the worker.
-    //
-    // Also originally I thought we could send a Blob but we'd need to refactor
-    // the code in unzipit/readEntryData as currently it reads the uncompressed
-    // bytes.
-    //
-    // We could hack in sending a Blob but it feels like a hack (too many ifs)
-    // We'd only send a blob if the source is a BlobReader and I actually have
-    // no idea io slicing a Blob is efficient.
-    //
-    //if (!isBlob(src) && !isSharedArrayBuffer(src)) {
-    //  transferables.push(src);
-    //}
-    worker.postMessage({
-      type: 'inflate',
-      data: {
-        id,
-        type,
-        src,
-        uncompressedSize,
-      },
-    }, transferables);
+  if (config.useWorkers && canUseWorkers) {
+    const worker = await getAvailableWorker();
+    // canUseWorkers might have been set out-of-band (need refactor)
+    if (canUseWorkers) {
+      if (worker) {
+        const {id, src, uncompressedSize, type, resolve, reject} = waitingForWorkerQueue.shift();
+        currentlyProcessingIdToRequestMap.set(id, {id, resolve, reject});
+        const transferables = [];
+        // NOTE: Originally I thought you could transfer an ArrayBuffer.
+        // The code on this side is often using views into the entire file
+        // which means if we transferred we'd lose the entire file. That sucks
+        // because it means there's an expensive copy to send the uncompressed
+        // data to the worker.
+        //
+        // Also originally I thought we could send a Blob but we'd need to refactor
+        // the code in unzipit/readEntryData as currently it reads the uncompressed
+        // bytes.
+        //
+        // We could hack in sending a Blob but it feels like a hack (too many ifs)
+        // We'd only send a blob if the source is a BlobReader and I actually have
+        // no idea if slicing a Blob is efficient.
+        //
+        //if (!isBlob(src) && !isSharedArrayBuffer(src)) {
+        //  transferables.push(src);
+        //}
+        worker.postMessage({
+          type: 'inflate',
+          data: {
+            id,
+            type,
+            src,
+            uncompressedSize,
+          },
+        }, transferables);
+      }
+      return;
+    }
   }
+
+  // inflate locally
+  const {src, uncompressedSize, type, resolve} = waitingForWorkerQueue.shift();
+  inflateRawLocal(src, uncompressedSize, type, resolve);
 }
 
 export function setOptions(options) {
@@ -159,16 +227,8 @@ export function inflateRawAsync(src, uncompressedSize, type) {
     //    as the ArrayBuffer has to be copied to the worker.
     //
     // I guess benchmarking is really the only thing to try.
-    if (config.useWorkers) {
-      waitingForWorkerQueue.push({src, uncompressedSize, type, resolve, reject, id: nextId++});
-      processWaitingForWorkerQueue();
-    } else {
-      const dst = new Uint8Array(uncompressedSize);
-      inflateRaw(src, dst);
-      resolve(type
-         ? new Blob([dst], {type})
-         : dst.buffer);
-    }
+    waitingForWorkerQueue.push({src, uncompressedSize, type, resolve, reject, id: nextId++});
+    processWaitingForWorkerQueue();
   });
 }
 
@@ -184,4 +244,5 @@ export async function cleanup() {
   clearArray(availableWorkers);
   clearArray(waitingForWorkerQueue);
   currentlyProcessingIdToRequestMap.clear();
+  numWorkers = 0;
 }
