@@ -1,4 +1,4 @@
-/* global SharedArrayBuffer */
+/* global SharedArrayBuffer, process */
 
 export function readBlobAsArrayBuffer(blob) {
   if (blob.arrayBuffer) {
@@ -21,3 +21,9 @@ export function isBlob(v) {
 export function isSharedArrayBuffer(b) {
   return typeof SharedArrayBuffer !== 'undefined' && b instanceof SharedArrayBuffer;
 }
+
+export const isNode =
+    (typeof process !== 'undefined') &&
+    process.versions &&
+    (typeof process.versions.node !== 'undefined') &&
+    (typeof process.versions.electron === 'undefined');

@@ -1,6 +1,7 @@
-/* global process, require */
+/* global require */
 
 import {inflateRaw} from 'uzip-module';
+import {isNode} from './utils';
 
 const config = {
   numWorkers: 1,
@@ -44,8 +45,6 @@ function handleResult(e) {
 }
 
 const workerHelper = (function() {
-  const isNode = (typeof process !== 'undefined') &&
-                 (typeof process.versions.node !== 'undefined');
   if (isNode) {
     const {Worker} = require('worker_threads');
     return {

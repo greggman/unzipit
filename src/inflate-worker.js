@@ -1,7 +1,7 @@
-/* global process, require */
+/* global require */
 
 import {inflateRaw} from 'uzip-module';
-import {readBlobAsArrayBuffer, isBlob} from './utils.js';
+import {readBlobAsArrayBuffer, isBlob, isNode} from './utils.js';
 
 // note: we only handle the inflate portion in a worker
 // every other part is already async and JavaScript
@@ -10,8 +10,6 @@ import {readBlobAsArrayBuffer, isBlob} from './utils.js';
 // might take time but that's an unlikely situation.
 
 const msgHelper = (function() {
-  const isNode = (typeof process !== 'undefined') &&
-                 (typeof process.versions.node !== 'undefined');
   if (isNode) {
     const { parentPort } = require('worker_threads');
 
