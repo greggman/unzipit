@@ -1,11 +1,11 @@
-/* unzipit@0.1.2, license MIT */
+/* unzipit@0.1.4, license MIT */
 (function (global, factory) {
   typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
   typeof define === 'function' && define.amd ? define(['exports'], factory) :
   (global = global || self, factory(global.unzipit = {}));
 }(this, function (exports) { 'use strict';
 
-  /* global SharedArrayBuffer */
+  /* global SharedArrayBuffer, process */
 
   function readBlobAsArrayBuffer(blob) {
     if (blob.arrayBuffer) {
@@ -24,6 +24,12 @@
   function isSharedArrayBuffer(b) {
     return typeof SharedArrayBuffer !== 'undefined' && b instanceof SharedArrayBuffer;
   }
+
+  const isNode =
+      (typeof process !== 'undefined') &&
+      process.versions &&
+      (typeof process.versions.node !== 'undefined') &&
+      (typeof process.versions.electron === 'undefined');
 
   class ArrayBufferReader {
     constructor(arrayBufferOrView) {
@@ -620,7 +626,7 @@
 
   function inflateRaw(file, buf) {  return F.inflate(file, buf);  }
 
-  /* global process, require */
+  /* global require */
 
   const config = {
     numWorkers: 1,
@@ -664,8 +670,6 @@
   }
 
   const workerHelper = (function() {
-    const isNode = (typeof process !== 'undefined') &&
-                   (typeof process.versions.node !== 'undefined');
     if (isNode) {
       const {Worker} = require('worker_threads');
       return {

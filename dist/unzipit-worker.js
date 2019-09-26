@@ -1,4 +1,4 @@
-/* unzipit@0.1.2, license MIT */
+/* unzipit@0.1.4, license MIT */
 (function (factory) {
   typeof define === 'function' && define.amd ? define(factory) :
   factory();
@@ -571,7 +571,7 @@
 
   function inflateRaw(file, buf) {  return F.inflate(file, buf);  }
 
-  /* global SharedArrayBuffer */
+  /* global SharedArrayBuffer, process */
 
   function readBlobAsArrayBuffer(blob) {
     if (blob.arrayBuffer) {
@@ -591,7 +591,13 @@
     return typeof Blob !== 'undefined' && v instanceof Blob;
   }
 
-  /* global process, require */
+  const isNode =
+      (typeof process !== 'undefined') &&
+      process.versions &&
+      (typeof process.versions.node !== 'undefined') &&
+      (typeof process.versions.electron === 'undefined');
+
+  /* global require */
 
   // note: we only handle the inflate portion in a worker
   // every other part is already async and JavaScript
@@ -600,8 +606,6 @@
   // might take time but that's an unlikely situation.
 
   const msgHelper = (function() {
-    const isNode = (typeof process !== 'undefined') &&
-                   (typeof process.versions.node !== 'undefined');
     if (isNode) {
       const { parentPort } = require('worker_threads');
 
