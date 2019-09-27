@@ -273,7 +273,7 @@ you ask for so similarly you can avoid having everything in memory except the th
 # API
 
 ```js
-import { unzipit, unzipitRaw, setOptions } from 'unzipit';
+import { unzipit, unzipitRaw, setOptions, cleanup } from 'unzipit';
 ```
 
 ## unzip
@@ -314,15 +314,20 @@ class ZipEntry {
 
 The options are 
 
-* `useWorkers`: true/false
+* `useWorkers`: true/false (default: false)
 
 * `workerURL`: string
 
   The URL to use to load the worker script. Note setting this automatically sets `useWorkers` to true
 
-* `numWorkers`: number (default 1)
+* `numWorkers`: number (default: 1)
 
   How many workers to use. You can inflate more files in parallel with more workers.
+  
+## cleanup
+
+Shuts down the workers. You would only need to call this if you want node
+to exit since it will wait for the workers to exit
 
 # Notes:
 
@@ -330,8 +335,6 @@ The options are
 
 If you ask for the same entry twice it will be read twice and decompressed twice.
 If you want to cache entires implement that at a level above unzipit
-
-## SharedArrayBuffer
 
 ## Streaming
 
