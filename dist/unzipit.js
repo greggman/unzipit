@@ -1,4 +1,4 @@
-/* unzipit@0.1.4, license MIT */
+/* unzipit@0.1.5, license MIT */
 (function (global, factory) {
   typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
   typeof define === 'function' && define.amd ? define(['exports'], factory) :
@@ -657,8 +657,7 @@
   const currentlyProcessingIdToRequestMap = new Map();
 
   function handleResult(e) {
-    availableWorkers.push(e.target);
-    processWaitingForWorkerQueue();
+    makeWorkerAvailable(e.target);
     const {id, error, data} = e.data;
     const request = currentlyProcessingIdToRequestMap.get(id);
     currentlyProcessingIdToRequestMap.delete(id);
@@ -724,6 +723,11 @@
     }
   }());
 
+  function makeWorkerAvailable(worker) {
+    availableWorkers.push(worker);
+    processWaitingForWorkerQueue();
+  }
+
   async function getAvailableWorker() {
     if (availableWorkers.length === 0 && numWorkers < config.numWorkers) {
       ++numWorkers;  // see comment at numWorkers declaration
@@ -758,6 +762,11 @@
       // canUseWorkers might have been set out-of-band (need refactor)
       if (canUseWorkers) {
         if (worker) {
+          if (waitingForWorkerQueue.length === 0) {
+            // the queue might be empty while we awaited for a worker.
+            makeWorkerAvailable(worker);
+            return;
+          }
           const {id, src, uncompressedSize, type, resolve, reject} = waitingForWorkerQueue.shift();
           currentlyProcessingIdToRequestMap.set(id, {id, resolve, reject});
           const transferables = [];
