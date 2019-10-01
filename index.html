@@ -233,11 +233,9 @@ import {unzip} from 'unzipit';
 
 async function readFiles(url) {
   const {entries} = await unzip(url);
-  for (const entry of Object.values(entries)) {
-    if (!entry.isDirectory) {
-      const data = await entry.arrayBuffer();
-    }
-  }
+  await Promise.all(Object.values(entries).map(async(entry) => {
+    entry.data = await entry.arrayBuffer();
+  }));
 }
 ```
 
