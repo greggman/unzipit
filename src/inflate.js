@@ -32,8 +32,7 @@ const waitingForWorkerQueue = [];
 const currentlyProcessingIdToRequestMap = new Map();
 
 function handleResult(e) {
-  availableWorkers.push(e.target);
-  processWaitingForWorkerQueue();
+  makeWorkerAvailable(e.target);
   const {id, error, data} = e.data;
   const request = currentlyProcessingIdToRequestMap.get(id);
   currentlyProcessingIdToRequestMap.delete(id);
@@ -112,6 +111,11 @@ const workerHelper = (function() {
   }
 }());
 
+function makeWorkerAvailable(worker) {
+  availableWorkers.push(worker);
+  processWaitingForWorkerQueue();
+}
+
 async function getAvailableWorker() {
   if (availableWorkers.length === 0 && numWorkers < config.numWorkers) {
     ++numWorkers;  // see comment at numWorkers declaration
@@ -146,6 +150,11 @@ async function processWaitingForWorkerQueue() {
     // canUseWorkers might have been set out-of-band (need refactor)
     if (canUseWorkers) {
       if (worker) {
+        if (waitingForWorkerQueue.length === 0) {
+          // the queue might be empty while we awaited for a worker.
+          makeWorkerAvailable(worker);
+          return;
+        }
         const {id, src, uncompressedSize, type, resolve, reject} = waitingForWorkerQueue.shift();
         currentlyProcessingIdToRequestMap.set(id, {id, resolve, reject});
         const transferables = [];
