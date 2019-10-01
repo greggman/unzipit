@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Keyshape -->
+<svg xmlns="http://www.w3.org/2000/svg" shape-rendering="geometricPrecision" text-rendering="geometricPrecision" viewBox="0 0 640 480" style="white-space: pre;">
+    <style>
+@keyframes a0_d { 0% { d: path('M0,163L612,163L612,-496C612,-496,617.5,-651,457,-651C296.5,-651,0,-651,0,-651L-105,-421'); } 100% { d: path('M0,163L612,163L612,-193C612,-193,617.5,-348,457,-348C296.5,-348,0,-348,0,-348L-105,-118'); } }
+@keyframes a1_d { 0% { d: path('M0,163L612,163L612,-496C612,-496,617.5,-651,457,-651C296.5,-651,0,-651,0,-651L-105,-421'); } 100% { d: path('M0,163L612,163L612,-193C612,-193,617.5,-348,457,-348C296.5,-348,0,-348,0,-348L-105,-118'); } }
+@keyframes a2_d { 0% { d: path('M0,163L612,163L612,-496C612,-496,617.5,-651,457,-651C296.5,-651,0,-651,0,-651L-105,-421'); } 100% { d: path('M0,163L612,163L612,-193C612,-193,617.5,-348,457,-348C296.5,-348,0,-348,0,-348L-105,-118'); } }
+@keyframes a3_d { 0% { d: path('M0,163L612,163L612,-496C612,-496,617.5,-651,457,-651C296.5,-651,0,-651,0,-651L-105,-421'); } 100% { d: path('M0,163L612,163L612,-193C612,-193,617.5,-348,457,-348C296.5,-348,0,-348,0,-348L-105,-118'); } }
+    </style>
+    <text fill="#000000" font-size="150" font-family="Arial" font-style="" font-weight="700" font-stretch="" letter-spacing="0" word-spacing="0" text-anchor="middle" stroke="none" transform="translate(320,234)" style="line-height: 16px;">unzipit</text>
+    <path d="M0,163L612,163L612,-496C612,-496,617.5,-651,457,-651C296.5,-651,0,-651,0,-651L-105,-421" stroke="none" fill="#53be9a" stroke-width="40" stroke-dasharray="20" transform="translate(-292,673)" style="animation: 2s linear both a0_d;"/>
+    <path d="M0,163L612,163L612,-496C612,-496,617.5,-651,457,-651C296.5,-651,0,-651,0,-651L-105,-421" stroke="none" fill="#53be9a" stroke-width="40" stroke-dasharray="20" stroke-dashoffset="20" transform="translate(932.045,673) scale(-1,1)" style="animation: 2s linear both a1_d;"/>
+    <path d="M0,163L612,163L612,-496C612,-496,617.5,-651,457,-651C296.5,-651,0,-651,0,-651L-105,-421" stroke="#93c55c" fill="none" stroke-width="40" stroke-dasharray="20" transform="translate(-292,673)" style="animation: 2s linear both a2_d;"/>
+    <path d="M0,163L612,163L612,-496C612,-496,617.5,-651,457,-651C296.5,-651,0,-651,0,-651L-105,-421" stroke="#399807" fill="none" stroke-width="40" stroke-dasharray="20" stroke-dashoffset="20" transform="translate(932.045,673) scale(-1,1)" style="animation: 2s linear both a3_d;"/>
+</svg>
