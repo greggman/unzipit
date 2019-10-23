@@ -7,7 +7,13 @@ Random access unzip library for browser and node based JavaScript
 [![Build Status](https://travis-ci.org/greggman/unzipit.svg?branch=master)](https://travis-ci.org/greggman/unzipit)
 [[Live Tests](https://greggman.github.io/unzipit/test/)]
 
+* Less than 8k gzipped without workers, Less than 13k with.
+* 6x to 25x faster than JSZip without workers and even faster with
+* Uses far less memory.
+
 # How to use
+
+Live Example: https://jsfiddle.net/greggman/awez4sd7/
 
 ## without workers
 
@@ -330,6 +336,10 @@ Shuts down the workers. You would only need to call this if you want node
 to exit since it will wait for the workers to exit
 
 # Notes:
+
+## Supporting old browsers
+
+Use a transpiler like [Babel](https://babeljs.io).
 
 ## Caching
 
