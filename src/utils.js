@@ -14,6 +14,11 @@ export function readBlobAsArrayBuffer(blob) {
   });
 }
 
+export async function readBlobAsUint8Array(blob) {
+  const arrayBuffer = await readBlobAsArrayBuffer(blob);
+  return new Uint8Array(arrayBuffer);
+}
+
 export function isBlob(v) {
   return typeof Blob !== 'undefined' && v instanceof Blob;
 }
