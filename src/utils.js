@@ -32,3 +32,7 @@ export const isNode =
     process.versions &&
     (typeof process.versions.node !== 'undefined') &&
     (typeof process.versions.electron === 'undefined');
+
+export function isTypedArraySameAsArrayBuffer(typedArray) {
+  return typedArray.byteOffset === 0 && typedArray.byteLength === typedArray.buffer.byteLength;
+}
