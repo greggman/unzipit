@@ -1,7 +1,7 @@
 /* global require */
 
 import {inflateRaw} from 'uzip-module';
-import {isNode} from './utils';
+import {isNode, isBlob, readBlobAsUint8Array} from './utils';
 
 const config = {
   numWorkers: 1,
@@ -132,6 +132,10 @@ async function getAvailableWorker() {
   return availableWorkers.pop();
 }
 
+// @param {Uint8Array} src
+// @param {number} uncompressedSize
+// @param {string} [type] mime-type
+// @returns {ArrayBuffer|Blob} ArrayBuffer if type is falsy or Blob otherwise.
 function inflateRawLocal(src, uncompressedSize, type, resolve) {
   const dst = new Uint8Array(uncompressedSize);
   inflateRaw(src, dst);
@@ -168,10 +172,6 @@ async function processWaitingForWorkerQueue() {
         // the code in unzipit/readEntryData as currently it reads the uncompressed
         // bytes.
         //
-        // We could hack in sending a Blob but it feels like a hack (too many ifs)
-        // We'd only send a blob if the source is a BlobReader and I actually have
-        // no idea if slicing a Blob is efficient.
-        //
         //if (!isBlob(src) && !isSharedArrayBuffer(src)) {
         //  transferables.push(src);
         //}
@@ -191,7 +191,11 @@ async function processWaitingForWorkerQueue() {
 
   // inflate locally
   const {src, uncompressedSize, type, resolve} = waitingForWorkerQueue.shift();
-  inflateRawLocal(src, uncompressedSize, type, resolve);
+  let data = src;
+  if (isBlob(src)) {
+    data = await readBlobAsUint8Array(src);
+  }
+  inflateRawLocal(data, uncompressedSize, type, resolve);
 }
 
 export function setOptions(options) {
@@ -204,11 +208,6 @@ export function setOptions(options) {
   config.numWorkers = options.numWorkers || config.numWorkers;
 }
 
-// type: undefined or mimeType string (eg: 'image/png')
-//
-// if `type` is falsy then an ArrayBuffer is returned
-//
-//
 // It has to take non-zero time to put a large typed array in a Blob since the very
 // next instruction you could change the contents of the array. So, if you're reading
 // the zip file for images/video/audio then all you want is a Blob on which to get a URL.
@@ -216,6 +215,11 @@ export function setOptions(options) {
 //
 // Conversely if you want the data itself then you want an ArrayBuffer immediately
 // since the worker can transfer its ArrayBuffer zero copy.
+//
+// @param {Uint8Array|Blob} src
+// @param {number} uncompressedSize
+// @param {string} [type] falsy or mimeType string (eg: 'image/png')
+// @returns {ArrayBuffer|Blob} ArrayBuffer if type is falsy or Blob otherwise.
 export function inflateRawAsync(src, uncompressedSize, type) {
   return new Promise((resolve, reject) => {
     // note: there is potential an expensive copy here. In order for the data
