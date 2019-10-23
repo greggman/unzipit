@@ -5,7 +5,11 @@ import {
   setOptions as setWorkerOptions,
   cleanup as cleanupInflate,
 } from './inflate.js';
-import {isSharedArrayBuffer} from './utils.js';
+import {
+  isBlob,
+  isSharedArrayBuffer,
+  isTypedArraySameAsArrayBuffer,
+} from './utils.js';
 
 /*
 class Zip {
@@ -45,11 +49,11 @@ class ZipEntry {
   }
   // returns a promise that returns a Blob for this entry
   async blob(type = 'application/octet-stream') {
-    return await readEntryData(this._reader, this._entry, type);
+    return await readEntryDataAsBlob(this._reader, this._entry, type);
   }
   // returns a promise that returns an ArrayBuffer for this entry
   async arrayBuffer() {
-    return await readEntryData(this._reader, this._entry);
+    return await readEntryDataAsArrayBuffer(this._reader, this._entry);
   }
   // returns text, assumes the text is valid utf8. If you want more options decode arrayBuffer yourself
   async text() {
@@ -68,6 +72,33 @@ const MAX_COMMENT_SIZE = 0xffff; // 2-byte size
 const EOCDR_SIGNATURE = 0x06054b50;
 
 async function readAs(reader, offset, length) {
+  return await reader.read(offset, length);
+}
+
+// The point of this function is we want to be able to pass the data
+// to a worker as fast as possible so when decompressing if the data
+// is already a blob and we can get a blob then get a blob.
+//
+// I'm not sure what a better way to refactor this is. We've got examples
+// of multiple readers. Ideally, for every type of reader we could ask
+// it, "give me a type that is zero copy both locally and when sent to a worker".
+//
+// The problem is the worker would also have to know the how to handle this
+// opaque type. I suppose the correct solution is to register different
+// reader handlers in the worker so BlobReader would register some
+// `handleZeroCopyType<BlobReader>`. At the moment I don't feel like
+// refactoring. As it is you just pass in an instance of the reader
+// but instead you'd have to register the reader and some how get the
+// source for the `handleZeroCopyType` handler function into the worker.
+// That sounds like a huge PITA, requiring you to put the implementation
+// in a separate file so the worker can load it or some other workaround
+// hack.
+//
+// For now this hack works even if it's not generic.
+async function readAsBlobOrTypedArray(reader, offset, length, type) {
+  if (reader.sliceAsBlob) {
+    return await reader.sliceAsBlob(offset, length, type);
+  }
   return await reader.read(offset, length);
 }
 
@@ -365,8 +396,7 @@ async function readEntries(reader, centralDirectoryOffset, entryCount, comment, 
   };
 }
 
-// returns an ArrayBuffer if type is falsy or a Blob of mime-type 'type'
-async function readEntryData(reader, entry, type) {
+async function readEntryDataHeader(reader, entry) {
   const buffer = await readAs(reader, entry.relativeOffsetOfLocalHeader, 30);
   // note: maybe this should be passed in or cached on entry
   // as it's async so there will be at least one tick (not sure about that)
@@ -414,15 +444,48 @@ async function readEntryData(reader, entry, type) {
       throw new Error(`file data overflows file bounds: ${fileDataStart} +  ${entry.compressedSize}  > ${totalLength}`);
     }
   }
-  const data = await readAs(reader, fileDataStart, entry.compressedSize);
-  if (!decompress) {
-    if (type) {
-      return new Blob([isSharedArrayBuffer(data.buffer) ? new Uint8Array(data) : data], {type});
-    }
-    return data.slice().buffer;
-  }
+  return {
+    decompress,
+    fileDataStart,
+  };
+}
 
-  const result = await inflateRawAsync(data, entry.uncompressedSize, type);
+async function readEntryDataAsArrayBuffer(reader, entry) {
+  const {decompress, fileDataStart} = await readEntryDataHeader(reader, entry);
+  if (!decompress) {
+    const dataView = await readAs(reader, fileDataStart, entry.compressedSize);
+    // make copy?
+    //
+    // 1. The source is a Blob/file. In this case we'll get back TypedArray we can just hand to the user
+    // 2. The source is a TypedArray. In this case we'll get back TypedArray that is a view into a larger buffer
+    //    but because ultimately this is used to return an ArrayBuffer to `someEntry.arrayBuffer()`
+    //    we need to return copy since we need the `ArrayBuffer`, not the TypedArray to exactly match the data.
+    //    Note: We could add another API function `bytes()` or something that returned a `Uint8Array`
+    //    instead of an `ArrayBuffer`. This would let us skip a copy here. But this case only happens for uncompressed
+    //    data. That seems like a rare enough case that adding a new API is not worth it? Or is it? A zip of jpegs or mp3s
+    //    might not be compressed. For now that's a TBD.
+    return isTypedArraySameAsArrayBuffer(dataView) ? dataView.buffer : dataView.slice().buffer;
+  }
+  // see comment in readEntryDateAsBlob
+  const typedArrayOrBlob = await readAsBlobOrTypedArray(reader, fileDataStart, entry.compressedSize);
+  const result = await inflateRawAsync(typedArrayOrBlob, entry.uncompressedSize);
+  return result;
+}
+
+async function readEntryDataAsBlob(reader, entry, type) {
+  const {decompress, fileDataStart} = await readEntryDataHeader(reader, entry);
+  if (!decompress) {
+    const typedArrayOrBlob = await readAsBlobOrTypedArray(reader, fileDataStart, entry.compressedSize, type);
+    if (isBlob(typedArrayOrBlob)) {
+      return typedArrayOrBlob;
+    }
+    return new Blob([isSharedArrayBuffer(typedArrayOrBlob.buffer) ? new Uint8Array(typedArrayOrBlob) : typedArrayOrBlob], {type});
+  }
+  // Here's the issue with this mess (should refactor?)
+  // if the source is a blob then we really want to pass a blob to inflateRawAsync to avoid a large
+  // copy if we're going to a worker.
+  const typedArrayOrBlob = await readAsBlobOrTypedArray(reader, fileDataStart, entry.compressedSize);
+  const result = await inflateRawAsync(typedArrayOrBlob, entry.uncompressedSize, type);
   return result;
 }
 
