@@ -5,7 +5,7 @@
 Random access unzip library for browser and node based JavaScript
 
 [![Build Status](https://travis-ci.org/greggman/unzipit.svg?branch=master)](https://travis-ci.org/greggman/unzipit)
-
+[[Live Tests](https://greggman.github.io/unzipit/test/)]
 
 # How to use
 
@@ -22,7 +22,7 @@ async function readFiles(url) {
     console.log(name, entry.size);
   }
   
-  // read an entry as an arraybuffer
+  // read an entry as an ArrayBuffer
   const arrayBuffer = await entries['path/to/file'].arrayBuffer();
 
   // read an entry as a blob and tag it with mime type 'image/png'
@@ -70,7 +70,7 @@ For node you need to make your own `Reader` or pass in an
 [`SharedArrayBuffer`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/SharedArrayBuffer),
 or [`TypedArray`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/TypedArray).
 
-### Load a file as an arraybuffer
+### Load a file as an ArrayBuffer
 
 ```js
 const unzipit = require('unzipit');
