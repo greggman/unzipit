@@ -1,6 +1,6 @@
 # unzipit.js
 
-<img src="./unzipit-no-anim.svg" style="max-width: 640px">
+<img src="./unzipit-no-anim.png" style="max-width: 640px">
 
 Random access unzip library for browser and node based JavaScript
 
