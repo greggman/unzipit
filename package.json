@@ -5,8 +5,9 @@
   "main": "dist/unzipit.js",
   "module": "dist/unzipit.module.js",
   "scripts": {
-    "build": "rollup -c",
-    "build-closure": "rollup -c && google-closure-compiler --warning_level=VERBOSE --jscomp_off=globalThis --jscomp_off=checkTypes --externs build/externs.js --language_in=ECMASCRIPT_2019 --language_out=ECMASCRIPT_2019 --js dist/unzipit.js --js_output_file dist/unzipit.min.js && google-closure-compiler --warning_level=VERBOSE --jscomp_off=globalThis --jscomp_off=checkTypes --externs build/externs.js --language_in=ECMASCRIPT_2019 --language_out=ECMASCRIPT_2019 --js dist/unzipit-worker.js --js_output_file dist/unzipit-worker.min.js",
+    "build": "npm run build-min",
+    "build-normal": "rollup -c",
+    "build-min": "rollup -c && google-closure-compiler --warning_level=VERBOSE --jscomp_off=globalThis --jscomp_off=checkTypes --externs build/externs.js --language_in=ECMASCRIPT_2019 --language_out=ECMASCRIPT_2019 --js dist/unzipit.js --js_output_file dist/unzipit.min.js && google-closure-compiler --warning_level=VERBOSE --jscomp_off=globalThis --jscomp_off=checkTypes --externs build/externs.js --language_in=ECMASCRIPT_2019 --language_out=ECMASCRIPT_2019 --js dist/unzipit-worker.js --js_output_file dist/unzipit-worker.min.js",
     "eslint": "eslint src/**/*.js test/tests/**/*.js",
     "test": "mocha test/node-test.js && node test/puppeteer.js"
   },
