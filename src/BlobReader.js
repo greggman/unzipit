@@ -7,7 +7,7 @@ export default class BlobReader {
   async getLength() {
     return this.blob.size;
   }
-  async read(offset, length, ) {
+  async read(offset, length) {
     const blob = this.blob.slice(offset, offset + length);
     const arrayBuffer = await readBlobAsArrayBuffer(blob);
     return new Uint8Array(arrayBuffer);
