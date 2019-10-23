@@ -8,6 +8,7 @@ module.exports = {
     "ecmaVersion": 8,
   },
   "plugins": [
+    "eslint-plugin-html",
     "eslint-plugin-optional-comma-spacing",
     "eslint-plugin-one-variable-per-var",
     "eslint-plugin-require-trailing-comma",
