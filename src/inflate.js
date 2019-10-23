@@ -43,6 +43,23 @@ function handleResult(e) {
   }
 }
 
+// Because Firefox uses non-standard onerror to signal an error.
+function startWorker(url) {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(url);
+    worker.onmessage = (e) => {
+      if (e.data === 'start') {
+        worker.onerror = undefined;
+        worker.onmessage = undefined;
+        resolve(worker);
+      } else {
+        reject(new Error(`unexpected message: ${e.data}`));
+      }
+    };
+    worker.onerror = reject;
+  });
+}
+
 const workerHelper = (function() {
   if (isNode) {
     const {Worker} = require('worker_threads');
@@ -68,7 +85,7 @@ const workerHelper = (function() {
         // download the text and do it. I reported this to Chrome
         // and they said it was fine so ¯\_(ツ)_/¯
         try {
-          const worker = new Worker(url);
+          const worker = await startWorker(url);
           return worker;
         } catch (e) {
           console.warn('could not load worker:', url);
@@ -76,10 +93,10 @@ const workerHelper = (function() {
 
         let text;
         try {
-          const req = await fetch(url);
+          const req = await fetch(url, {mode: 'cors'});
           const text = await req.text();
           url = URL.createObjectURL(new Blob([text], {type: 'application/javascript'}));
-          const worker = new Worker(url);
+          const worker = await startWorker(url);
           config.workerURL = url;  // this is a hack. What's a better way to structure this code?
           return worker;
         } catch (e) {
@@ -89,7 +106,7 @@ const workerHelper = (function() {
         if (text !== undefined) {
           try {
             url = `data:application/javascript;base64,${btoa(text)}`;
-            const worker = new Worker(url);
+            const worker = await startWorker(url);
             config.workerURL = url;
             return worker;
           } catch (e) {
@@ -98,8 +115,7 @@ const workerHelper = (function() {
         }
 
         console.warn('workers will not be used');
-        canUseWorkers = false;
-        return undefined;
+        throw new Error('can not start workers');
       },
       addEventListener(worker, fn) {
         worker.addEventListener('message', fn);
@@ -190,12 +206,18 @@ async function processWaitingForWorkerQueue() {
   }
 
   // inflate locally
-  const {src, uncompressedSize, type, resolve} = waitingForWorkerQueue.shift();
-  let data = src;
-  if (isBlob(src)) {
-    data = await readBlobAsUint8Array(src);
+  // We loop here because what happens if many requests happen at once
+  // the first N requests will try to async make a worker. Other requests
+  // will then be on the queue. But if we fail to make workers then there
+  // are pending requests.
+  while (waitingForWorkerQueue.length) {
+    const {src, uncompressedSize, type, resolve} = waitingForWorkerQueue.shift();
+    let data = src;
+    if (isBlob(src)) {
+      data = await readBlobAsUint8Array(src);
+    }
+    inflateRawLocal(data, uncompressedSize, type, resolve);
   }
-  inflateRawLocal(data, uncompressedSize, type, resolve);
 }
 
 export function setOptions(options) {
@@ -257,4 +279,5 @@ export async function cleanup() {
   clearArray(waitingForWorkerQueue);
   currentlyProcessingIdToRequestMap.clear();
   numWorkers = 0;
+  canUseWorkers = true;
 }

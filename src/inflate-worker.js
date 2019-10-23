@@ -84,3 +84,9 @@ msgHelper.addEventListener('message', function(e) {
   }
   fn(data);
 });
+
+if (!isNode) {
+  // needed for firefox AFAICT as there so no other
+  // way to know a worker loaded successfully.?
+  msgHelper.postMessage('start');
+}
