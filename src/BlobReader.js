@@ -12,4 +12,7 @@ export default class BlobReader {
     const arrayBuffer = await readBlobAsArrayBuffer(blob);
     return new Uint8Array(arrayBuffer);
   }
+  async sliceAsBlob(offset, length, type = '') {
+    return this.blob.slice(offset, offset + length, type);
+  }
 }
