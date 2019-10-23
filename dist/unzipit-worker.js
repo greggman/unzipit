@@ -1,4 +1,4 @@
-/* unzipit@0.1.5, license MIT */
+/* unzipit@0.1.6, license MIT */
 (function (factory) {
   typeof define === 'function' && define.amd ? define(factory) :
   factory();
@@ -587,6 +587,11 @@
     });
   }
 
+  async function readBlobAsUint8Array(blob) {
+    const arrayBuffer = await readBlobAsArrayBuffer(blob);
+    return new Uint8Array(arrayBuffer);
+  }
+
   function isBlob(v) {
     return typeof Blob !== 'undefined' && v instanceof Blob;
   }
@@ -640,8 +645,8 @@
     const {id, src, uncompressedSize, type} = req;
     try {
       let srcData;
-      if (isBlob(srcData)) {
-        srcData = await readBlobAsArrayBuffer(src);
+      if (isBlob(src)) {
+        srcData = await readBlobAsUint8Array(src);
       } else {
         srcData = new Uint8Array(src);
       }
