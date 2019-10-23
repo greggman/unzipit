@@ -170,7 +170,7 @@ describe('unzipit', function() {
 
       before(() => {
         setOptions({
-          workerURL: '../../dist/unzipit-worker.module.js',
+          workerURL: '../dist/unzipit-worker.module.js',
           numWorkers: 2,
         });
       });
