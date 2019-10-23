@@ -1,7 +1,7 @@
-/* global chai, describe, it, before, SharedArrayBuffer */
+/* global chai, Mocha, describe, it, after, before, SharedArrayBuffer */
 const assert = chai.assert;
 
-import {unzip, unzipRaw, setOptions} from '../../dist/unzipit.module.js';
+import {unzip, unzipRaw, setOptions, cleanup} from '../../dist/unzipit.module.js';
 import {readBlobAsArrayBuffer} from '../../src/utils.js';
 
 
@@ -47,6 +47,10 @@ describe('unzipit', function() {
     'large/LICENSE.txt':                   { sha256: '95be0160e771271be4015afc340ccf15f4e70e2581c5ca090d0a39be17395ac2', },
     'large/cherry-blossoms-tokyo.jpg':     { sha256: '07c398b3acc1edc5ef47bd7c1da2160d66f9c297d2967e30f2009f79b5e6eb0e', },
   };
+
+  function onlyFiles(entries) {
+    return Object.fromEntries(Object.entries(entries).filter(([, entry]) => !entry.isDirectory && !entry.isDir));
+  }
 
   async function checkZipEntriesMatchExpected(entries, expectedFiles) {
     const expected = Object.assign({}, expectedFiles);
@@ -162,6 +166,10 @@ describe('unzipit', function() {
         });
       });
 
+      after(() => {
+        cleanup();
+      });
+
       addTests(loader);
 
     });
@@ -173,6 +181,10 @@ describe('unzipit', function() {
           workerURL: '../dist/unzipit-worker.module.js',
           numWorkers: 2,
         });
+      });
+
+      after(() => {
+        cleanup();
       });
 
       addTests(loader);
@@ -202,6 +214,47 @@ describe('unzipit', function() {
         assert.notStrictEqual(entries['stuff/dog.txt'].commentBytes.buffer, arrayBuffer);
         const dataArrayBuffer = await entries['stuff/dog.txt'].arrayBuffer();
         assert.notStrictEqual(dataArrayBuffer, arrayBuffer);
+      });
+
+    });
+
+    describe('with bad worker url (expected can\'t load errors and maybe a SyntaxError)', function() {
+
+      let oldErrorHandler;
+      before(() => {
+        // prevent Mocha from reacting to bad worker script
+        oldErrorHandler = window.onerror;
+        Mocha.process.removeListener('uncaughtException');
+        setOptions({
+          workerURL: '../dist/does-not-exist.js',
+          numWorkers: 2,
+        });
+        console.log('VVVVVVV [ Expect Errors Below This Line ] VVVVVVV');
+      });
+
+      after(() => {
+        cleanup();
+        window.onerror = oldErrorHandler;
+        console.log('^^^^^^^ [ Expect Errors Above This Line ] ^^^^^^^');
+      });
+
+      it('loaded all 6 files', async() => {
+        const {entries} = await unzip('./data/large.zip');
+        const files = onlyFiles(entries);
+        // important: Must send all 6 requests at once to test issue
+        const datas = await Promise.all(Object.values(files).map(entry => entry.arrayBuffer()));
+        const expected = onlyFiles(expectedLarge);
+        const filesAsArray = Object.entries(files);
+        for (let ndx = 0; ndx < filesAsArray.length; ++ndx) {
+          const [name] = filesAsArray[ndx];
+          const data = datas[ndx];
+          const expect = expected[name];
+          assert.isOk(expect, name);
+          delete expected[name];
+          const sig = await sha256(new Uint8Array(data));
+          assert.equal(sig, expect.sha256, name);
+        }
+        assert.deepEqual(expected, {}, 'all content accounted for');
       });
 
     });
