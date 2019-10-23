@@ -8,7 +8,7 @@ Random access unzip library for browser and node based JavaScript
 [[Live Tests](https://greggman.github.io/unzipit/test/)]
 
 * Less than 8k gzipped without workers, Less than 13k with.
-* 6x to 25x faster than JSZip without workers and even faster with
+* [6x to 25x faster than JSZip](https://jsperf.com/jszip-vs-unzipit/4) without workers and even faster with
 * Uses far less memory.
 
 # How to use
