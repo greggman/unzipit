@@ -1,7 +1,7 @@
 /* global require */
 
 import {inflateRaw} from 'uzip-module';
-import {readBlobAsArrayBuffer, isBlob, isNode} from './utils.js';
+import {readBlobAsUint8Array, isBlob, isNode} from './utils.js';
 
 // note: we only handle the inflate portion in a worker
 // every other part is already async and JavaScript
@@ -44,8 +44,8 @@ async function inflate(req) {
   const {id, src, uncompressedSize, type} = req;
   try {
     let srcData;
-    if (isBlob(srcData)) {
-      srcData = await readBlobAsArrayBuffer(src);
+    if (isBlob(src)) {
+      srcData = await readBlobAsUint8Array(src);
     } else {
       srcData = new Uint8Array(src);
     }
