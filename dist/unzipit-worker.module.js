@@ -1,4 +1,4 @@
-/* unzipit@0.1.8, license MIT */
+/* unzipit@0.1.9, license MIT */
 function deflateRaw(data, out, opos, lvl) {	
 	var opts = [
 	/*
@@ -680,3 +680,9 @@ msgHelper.addEventListener('message', function(e) {
   }
   fn(data);
 });
+
+if (!isNode) {
+  // needed for firefox AFAICT as there so no other
+  // way to know a worker loaded successfully.?
+  msgHelper.postMessage('start');
+}
