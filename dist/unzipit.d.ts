@@ -39,12 +39,12 @@ export interface Reader {
 export type UnzipitOptions = {
   useWorkers?: boolean;
   workerURL?: string;
-  numWorkers: number;
+  numWorkers?: number;
 };
 
 export type TypedArray = Int8Array | Uint8Array | Int16Array | Uint16Array | Int32Array | Uint32Array | Float32Array;
 
 export function unzip(src: string | ArrayBuffer | TypedArray | Blob | Reader): Promise<ZipInfo>;
-export function unzipRaw(src: string | ArrayBuffer | TypedArray | Blob | Reader):Promise<ZipInfoRaw>;
+export function unzipRaw(src: string | ArrayBuffer | TypedArray | Blob | Reader): Promise<ZipInfoRaw>;
 export function setOptions(options: UnzipitOptions): void;
 export function cleanup(): void;
