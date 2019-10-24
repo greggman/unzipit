@@ -4,10 +4,12 @@
   "description": "random access unzip library for JavaScript",
   "main": "dist/unzipit.js",
   "module": "dist/unzipit.module.js",
+  "types": "dist/unzipit.d.ts",
   "scripts": {
-    "build": "npm run build-min",
+    "build": "npm run build-min && npm run build-ts",
     "build-normal": "rollup -c",
     "build-min": "rollup -c && google-closure-compiler --warning_level=VERBOSE --jscomp_off=globalThis --jscomp_off=checkTypes --externs build/externs.js --language_in=ECMASCRIPT_2019 --language_out=ECMASCRIPT_2019 --js dist/unzipit.js --js_output_file dist/unzipit.min.js && google-closure-compiler --warning_level=VERBOSE --jscomp_off=globalThis --jscomp_off=checkTypes --externs build/externs.js --language_in=ECMASCRIPT_2019 --language_out=ECMASCRIPT_2019 --js dist/unzipit-worker.js --js_output_file dist/unzipit-worker.min.js",
+    "build-ts": "tsc --lib es2019,dom,dom.iterable --target es2019 test/ts/ts-test.ts",
     "eslint": "eslint src/**/*.js test/tests/**/*.js",
     "test": "mocha test/node-test.js && node test/puppeteer.js"
   },
@@ -40,9 +42,12 @@
     "mocha": "^6.2.0",
     "puppeteer": "^1.20.0",
     "rollup": "^1.21.4",
-    "rollup-plugin-node-resolve": "^5.2.0"
+    "rollup-plugin-node-resolve": "^5.2.0",
+    "typescript": "^3.6.4"
   },
   "dependencies": {
+    "@types/chai": "^4.2.4",
+    "@types/mocha": "^5.2.7",
     "uzip-module": "^1.0.1"
   }
 }

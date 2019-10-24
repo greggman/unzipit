@@ -14,6 +14,16 @@ const server = app.listen(port, () => {
   test(port);
 });
 
+function makePromiseInfo() {
+  const info = {};
+  const promise = new Promise((resolve, reject) => {
+    Object.assign(info, {resolve, reject});
+  });
+  info.promise = promise;
+  return info;
+}
+
+
 async function test(port) {
   const browser = await puppeteer.launch();
   const page = await browser.newPage();
@@ -23,17 +33,33 @@ async function test(port) {
     console.log(...msg.args().map(v => v.toString().substr(9)));
   });
 
+  let totalFailures = 0;
+  let waitingPromiseInfo;
+
   // Get the "viewport" of the page, as reported by the page.
   page.on('domcontentloaded', async() => {
     const failures = await page.evaluate(() => {
       return window.testsPromiseInfo.promise;
     });
 
-    await browser.close();
-    server.close();
+    totalFailures += failures;
 
-    process.exit(failures ? 1 : 0);  // eslint-disable-line
+    waitingPromiseInfo.resolve();
   });
 
-  await page.goto(`http://localhost:${port}/test/index.html?reporter=spec`);
+  const urls = [
+    `http://localhost:${port}/test/index.html?reporter=spec`,
+    `http://localhost:${port}/test/ts/ts-test.html?reporter=spec`,
+  ];
+
+  for (const url of urls) {
+    waitingPromiseInfo = makePromiseInfo();
+    await page.goto(url);
+    await waitingPromiseInfo.promise;
+  }
+
+  await browser.close();
+  server.close();
+
+  process.exit(totalFailures ? 1 : 0);  // eslint-disable-line
 }

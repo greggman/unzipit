@@ -2,6 +2,9 @@ import resolve from 'rollup-plugin-node-resolve';
 import fs from 'fs';
 
 const pkg = JSON.parse(fs.readFileSync('package.json', {encoding: 'utf8'}));
+const banner = `/* unzipit@${pkg.version}, license MIT */
+///<reference path="unzipit.module.d.ts" />
+`;
 
 export default [
   {
@@ -17,13 +20,13 @@ export default [
         name: 'unzipit',
         file: 'dist/unzipit.js',
         indent: '  ',
-        banner: `/* unzipit@${pkg.version}, license MIT */`,
+        banner,
       },
       {
         format: 'es',
         file: 'dist/unzipit.module.js',
         indent: '  ',
-        banner: `/* unzipit@${pkg.version}, license MIT */`,
+        banner,
       },
     ],
   },
@@ -40,13 +43,13 @@ export default [
         name: 'unzipit',
         file: 'dist/unzipit-worker.js',
         indent: '  ',
-        banner: `/* unzipit@${pkg.version}, license MIT */`,
+        banner,
       },
       {
         format: 'es',
         file: 'dist/unzipit-worker.module.js',
         indent: '  ',
-        banner: `/* unzipit@${pkg.version}, license MIT */`,
+        banner,
       },
     ],
   },
