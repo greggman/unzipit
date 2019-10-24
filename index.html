@@ -247,9 +247,9 @@ async function readFiles(url) {
 One other thing is that many libraries seem bloated. IMO the smaller the API the better.
 I don't need a library to try to do 50 things via options and configuration. Rather I need
 a library to handle the main task and make it possible to do the rest outside the library.
-This makes a library far far more flexible.
+This makes a library far more flexible.
 
-As an example some libraries provide no raw data for filenames. Apparently many zip files
+As an example some libraries provide no raw data for filenames. Apparently som zip files
 have non-utf8 filenames in them. The solution for this library is to do that on your own.
 
 Example
@@ -265,15 +265,13 @@ const entries = Object.fromEntries(entriesArray.map(v => [v.name, v]));
 ... // same as above beyond this point
 ```
 
-So much easier than passing in functions to decode names or setting flags whether or not to decode them.
-
 Same thing with filenames. If you care about slashes or backslashes do that yourself outside the library
 
 ```js
 const {entries} = await unzipit(url);
 // change slashes and backslashes into '-'
 entries.forEach(entry => {
-  entry.name = name.replace(/\\|\//g, '-');
+  entry.name = entry.name.replace(/\\|\//g, '-');
 });
 ```
 
@@ -316,7 +314,7 @@ img.src = url;
 Notice there is no access to the data using Blobs which means the browser
 manages them. They don't count as part of the JavaScript heap.
 
-In node, the examples with the file readers will only read the header and whatever entries contents
+In node, the examples with the file readers will only read the header and whatever entries' contents
 you ask for so similarly you can avoid having everything in memory except the things you read.
 
 
