@@ -1,4 +1,4 @@
-/* unzipit@0.1.9, license MIT */
+/* unzipit@1.0.0, license MIT */
 /* global SharedArrayBuffer, process */
 
 function readBlobAsArrayBuffer(blob) {

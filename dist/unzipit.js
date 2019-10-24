@@ -1,4 +1,4 @@
-/* unzipit@0.1.9, license MIT */
+/* unzipit@1.0.0, license MIT */
 (function (global, factory) {
   typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
   typeof define === 'function' && define.amd ? define(['exports'], factory) :
