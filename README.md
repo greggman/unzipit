@@ -13,7 +13,7 @@ Random access unzip library for browser and node based JavaScript
 
 # How to use
 
-Live Example: https://jsfiddle.net/greggman/awez4sd7/
+Live Example: [https://jsfiddle.net/greggman/awez4sd7/](https://jsfiddle.net/greggman/awez4sd7/)
 
 ## without workers
 
@@ -27,7 +27,7 @@ async function readFiles(url) {
   for (const [name, entry] in Object.entries(entries)) {
     console.log(name, entry.size);
   }
-  
+
   // read an entry as an ArrayBuffer
   const arrayBuffer = await entries['path/to/file'].arrayBuffer();
 
@@ -93,7 +93,7 @@ You can also pass your own reader. Here's 2 examples. This first one
 is stateless. That means there is never anything to clean up. But,
 it has the overhead of opening the source file once for each time
 you get the contents of an entry. I have no idea what the overhead
-of that is. 
+of that is.
 
 ```js
 const unzipit = require('unzipit');
@@ -220,7 +220,7 @@ entriesArray.forEach(entry => {
 const entries = Object.fromEntries(entriesArray.map(v => [v.name, v]));
 ... // same as above beyond this point
 ```
-    
+
 So much easier than passing in functions to decode names or setting flags whether or not to decode them.
 
 Same thing with filenames. If you care about slashes or backslashes do that yourself outside the library
@@ -243,19 +243,19 @@ You need one or the other not both. See zlib as an example.
 This library is ES6 based using async/await and import which makes the code
 much simpler.
 
-Advantages over other libraries. 
+Advantages over other libraries.
 
-* JSZIP requires the entire compressed file in memory. 
-  It also requires reading through all entries in order. 
+* JSZIP requires the entire compressed file in memory.
+  It also requires reading through all entries in order.
 
-* UZIP requires the entire compressed file to be in memory and 
+* UZIP requires the entire compressed file to be in memory and
   the entire uncompressed contents of all the files to be in memory.
-  
+
 * Yauzl does not require all the files to be in memory but
-  they do have to be read in order and it has very peculiar API where 
+  they do have to be read in order and it has very peculiar API where
   you still have to manually go through all the entries even if
   you don't choose to read their contents. Further it's node only.
-  
+
 This library does not require all content to be in memory. If you use a Blob
 the browser can effectively virtualize access so it doesn't have to be in memory.
 Only the entries you access use memory. As well, if you only need the data
@@ -282,10 +282,23 @@ you ask for so similarly you can avoid having everything in memory except the th
 import { unzipit, unzipitRaw, setOptions, cleanup } from 'unzipit';
 ```
 
-## unzip
-## unzipRaw
+# unzip, unzipRaw
 
-`unzip` and `unzipRaw` are async functions that take a url, `Blob`, `TypedArray`, or `ArrayBuffer`.
+```js
+async unzip(url: string): ZipInfo
+async unzip(src: Blob): ZipInfo
+async unzip(src: TypedArray): ZipInfo
+async unzip(src: ArrayBuffer): ZipInfo
+async unzip(src: Reader): ZipInfo
+
+async unzipRaw(url: string): ZipInfoRaw
+async unzipRaw(src: Blob): ZipInfoRaw
+async unzipRaw(src: TypedArray): ZipInfoRaw
+async unzipRaw(src: ArrayBuffer): ZipInfoRaw
+async unzipRaw(src: Reader): ZipInfoRaw
+```
+
+`unzip` and `unzipRaw` are async functions that take a url, `Blob`, `TypedArray`, or `ArrayBuffer` or a `Reader`.
 Both functions return an object with fields `zip` and `entries`.
 The difference is with `unzip` the `entries` is an object mapping filenames to `ZipEntry`s where as `unzipRaw` it's
 an array of `ZipEntry`s. The reason to use `unzipRaw` over `unzip` is if the filenames are not utf8
@@ -293,32 +306,60 @@ then the library can't make an object from the names. In that case you get an ar
 and decode the names as you please.
 
 ```js
+type ZipInfo = {
+  zip: Zip,
+  entries: {[key: string]: ZipEntry},
+};
+```
+
+```js
+type ZipInfoRaw = {
+  zip: Zip,
+  entries: [ZipEntry],
+};
+```
+
+```js
 class Zip {
-  comment,  // the comment for the zip file
-  commentBytes,  // the raw data for comment, see nameBytes
+  comment: string,           // the comment for the zip file
+  commentBytes: Uint8Array,  // the raw data for comment, see nameBytes
 }
 ```
 
 ```js
 class ZipEntry {
-  async blob(type)   // returns a Blob for this entry (optional type as in 'image/jpeg'
-  async arrayBuffer() // returns an ArrayBuffer for this entry
-  async text() // returns text, assumes the text is valid utf8. If you want more options decode arrayBuffer yourself
-  async json() // returns text with JSON.parse called on it. If you want more options decode arrayBuffer yourself
-  name,        // name of entry
-  nameBytes,   // raw name of entry (see notes)
-  size,    // size in bytes
-  compressedSize, // size before decompressing
-  comment,  // the comment for this entry
-  commentBytes, // the raw comment for this entry
-  lastModDate, // a Date
-  isDirectory,
+  async blob(type?: string): Blob,  // returns a Blob for this entry
+                                    //  (optional type as in 'image/jpeg')
+  async arrayBuffer(): ArrayBuffer, // returns an ArrayBuffer for this entry
+  async text(): string,             // returns text, assumes the text is valid utf8.
+                                    // If you want more options decode arrayBuffer yourself
+  async json(): any,                // returns text with JSON.parse called on it.
+                                    // If you want more options decode arrayBuffer yourself
+  name: string,                     // name of entry
+  nameBytes: Uint8Array,            // raw name of entry (see notes)
+  size: number,                     // size in bytes
+  compressedSize: number,           // size before decompressing
+  comment: string,                  // the comment for this entry
+  commentBytes: Uint8Array,         // the raw comment for this entry
+  lastModDate: Date,                // a Date
+  isDirectory: bool,                // True if directory
+}
+```
+
+```js
+interface Reader {
+  async getLength(): number,
+  async read(offset, size): Uint8Array,
 }
 ```
 
 ## setOptions
 
-The options are 
+```js
+setOptions(options: UnzipitOptions)
+```
+
+The options are
 
 * `useWorkers`: true/false (default: false)
 
@@ -329,11 +370,15 @@ The options are
 * `numWorkers`: number (default: 1)
 
   How many workers to use. You can inflate more files in parallel with more workers.
-  
+
 ## cleanup
 
+```js
+cleanup()
+```
+
 Shuts down the workers. You would only need to call this if you want node
-to exit since it will wait for the workers to exit
+to exit since it will wait for the workers to exit.
 
 # Notes:
 
@@ -397,11 +442,11 @@ async function readFiles(url) {
     const data = await entry.arrayBuffer();
   }
 }
-``` 
+```
 
 ## Special headers and options for network requests
 
-The library takes a URL but there are no options for cors, or credentials etc. 
+The library takes a URL but there are no options for cors, or credentials etc.
 If you need that pass in a Blob or ArrayBuffer you fetched yourself.
 
 ```js
@@ -409,7 +454,7 @@ import {unzip} from 'unzipit';
 
 ...
 
-const req = await fetch(url, { mode: cors });
+const req = await fetch(url, { mode: 'cors' });
 const blob = await req.blob();
 const {entries} = await unzip(blob);
 ```
@@ -432,7 +477,7 @@ then go to `http://localhost:8080/test/` to easily re-run the tests.
 
 Of course you can also `npm test` to run them from the command line.
 
-## Debugging 
+## Debugging
 
 Follow the instructions on testing but add  `?timeout=0` to the URL as in `http://localhost:8080/tests/?timeout=0`
 
