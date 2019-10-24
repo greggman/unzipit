@@ -13,6 +13,10 @@ declare global {
 const assert: Chai.Assert = chai.assert;
 
 describe('typescript', () => {
+  before(() => {
+    setOptions({useWorkers: false});  // this the default
+  });
+
   const longContent = `${new Array(200).fill('compress').join('')}\n`;
   const expectedStuff: {[name: string]: any} = {
     'stuff/': { isDir: true, },

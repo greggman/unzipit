@@ -2,9 +2,7 @@ import resolve from 'rollup-plugin-node-resolve';
 import fs from 'fs';
 
 const pkg = JSON.parse(fs.readFileSync('package.json', {encoding: 'utf8'}));
-const banner = `/* unzipit@${pkg.version}, license MIT */
-///<reference path="unzipit.module.d.ts" />
-`;
+const banner = `/* unzipit@${pkg.version}, license MIT */`;
 
 export default [
   {
