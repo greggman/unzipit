@@ -2,6 +2,7 @@
 import './tests/ArrayBufferReader-test.js';
 import './tests/BlobReader-test.js';
 import './tests/unzipit-test.js';
+import './tests/webgl-test.js';
 
 const settings = Object.fromEntries(new URLSearchParams(window.location.search).entries());
 if (settings.reporter) {
