@@ -94,7 +94,7 @@ const workerHelper = (function() {
         let text;
         try {
           const req = await fetch(url, {mode: 'cors'});
-          const text = await req.text();
+          text = await req.text();
           url = URL.createObjectURL(new Blob([text], {type: 'application/javascript'}));
           const worker = await startWorker(url);
           config.workerURL = url;  // this is a hack. What's a better way to structure this code?
