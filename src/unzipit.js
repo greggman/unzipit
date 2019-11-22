@@ -136,7 +136,7 @@ function getUint64LE(uint8View, offset) {
 /* eslint-enable no-irregular-whitespace */
 
 const utf8Decoder = new TextDecoder();
-function decodeBuffer(uint8View/*, isUTF8*/) {
+function decodeBuffer(uint8View, isUTF8) {  /* eslint-disable-line no-unused-vars */ /* lgtm [js/superfluous-trailing-arguments] */
   if (isSharedArrayBuffer(uint8View.buffer)) {
     uint8View = new Uint8Array(uint8View);
   }
