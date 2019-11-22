@@ -1,7 +1,3 @@
 *.pyc
 .DS_Store
 node_modules
-out
-extra
-package-lock.json
-test/ts/ts-test.js
