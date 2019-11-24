@@ -470,7 +470,7 @@ until you're finished using the data. The library doesn't make a copy, it uses t
 
 # Testing
 
-When writing tests serve the folder with your favorite web server (recommend [`http-server`](https://www.npmjs.com/package/http-server))
+When writing tests serve the folder with your favorite web server (recommend [`servez`](https://www.npmjs.com/package/servez))
 then go to `http://localhost:8080/test/` to easily re-run the tests.
 
 Of course you can also `npm test` to run them from the command line.
