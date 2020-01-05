@@ -1,7 +1,7 @@
 /* global chai, Mocha, describe, it, after, before, SharedArrayBuffer */
 const assert = chai.assert;
 
-import {unzip, unzipRaw, setOptions, cleanup} from '../../dist/unzipit.module.js';
+import {unzip, unzipRaw, setOptions, cleanup, HTTPRangeReader} from '../../dist/unzipit.module.js';
 import {readBlobAsArrayBuffer} from '../../src/utils.js';
 
 
@@ -280,6 +280,31 @@ describe('unzipit', function() {
 
   });
 
+  describe('http range requests', async() => {
+
+    async function unzipWithRangeReader(url) {
+      const reader = new HTTPRangeReader(url);
+      return await unzip(reader);
+    }
+
+    addTopTests({
+      async loadStuffZip() {
+        return await unzipWithRangeReader('./data/stuff.zip');
+      },
+      async loadStuffZipRaw() {
+        const reader = new HTTPRangeReader('./data/stuff.zip');
+        return await unzipRaw(reader);
+      },
+      async loadTest64Zip() {
+        return await unzipWithRangeReader('./data/test64.zip');
+      },
+      async loadLargeZip() {
+        return await unzipWithRangeReader('./data/large.zip');
+      },
+    });
+
+  });
+
   describe('ArrayBuffer', () => {
 
     let stuffZipArrayBuffer;
@@ -392,5 +417,6 @@ describe('unzipit', function() {
     });
 
   }
+
 
 });
