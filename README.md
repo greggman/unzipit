@@ -10,6 +10,7 @@ Random access unzip library for browser and node based JavaScript
 * Less than 8k gzipped without workers, Less than 13k with.
 * [6x to 25x faster than JSZip](https://jsperf.com/jszip-vs-unzipit/4) without workers and even faster with
 * Uses far less memory.
+* Can [avoid downloading the entire zip file](#Streaming) if the server supports http range requests.
 
 # How to use
 
@@ -400,43 +401,12 @@ read that way but are perfectly valid zip files.
 If your server supports http range requests you can do this.
 
 ```js
-class HTTPRangeReader {
-  constructor(url) {
-    this.url = url;
-  }
-  async getLength() {
-    if (this.length === undefined) {
-      const req = await fetch(this.url, { method: 'HEAD' });
-      this.length = parseInt(req.headers.get('content-length'));
-      if (Number.isNaN(this.length)) {
-        throw Error('could not get length');
-      }
-    }
-    return this.length;
-  }
-  async read(offset, size) {
-    const req = await fetch(this.url, {
-      headers: {
-        Range: `bytes=${offset}-${offset + size - 1}`,
-      },
-    });
-    const buffer = await req.arrayBuffer();
-    return new Uint8Array(buffer);
-  }
-}
-```
-
-To use it you'd do something like
-
-```js
-import {unzip} from 'unzipit';
+import {unzip} from 'unzipit, HTTPRangeReader';
 
 async function readFiles(url) {
   const reader = new HTTPRangeReader(url);
   const {zip, entries} = await unzip(reader);
-  for (const entry in entries) {
-    const data = await entry.arrayBuffer();
-  }
+  // ... access the entries as normal
 }
 ```
 
