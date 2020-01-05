@@ -397,10 +397,9 @@ where you can cheat and read the local headers of each file but that is an inval
 way to read a zip file and it's trivial to create zip files that will fail when
 read that way but are perfectly valid zip files.
 
-If your server supports http range requests you could maybe do something like this.
+If your server supports http range requests you can do this.
 
 ```js
-// PS: un-tested!
 class HTTPRangeReader {
   constructor(url) {
     this.url = url;
@@ -408,8 +407,7 @@ class HTTPRangeReader {
   async getLength() {
     if (this.length === undefined) {
       const req = await fetch(this.url, { method: 'HEAD' });
-      const headers = Object.fromEntries(req.headers.entries());
-      this.length = parseInt(headers['content-length']);
+      this.length = parseInt(req.headers.get('content-length'));
       if (Number.isNaN(this.length)) {
         throw Error('could not get length');
       }
@@ -423,7 +421,7 @@ class HTTPRangeReader {
       },
     });
     const buffer = await req.arrayBuffer();
-    return buffer;
+    return new Uint8Array(buffer);
   }
 }
 ```
