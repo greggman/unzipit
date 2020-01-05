@@ -1,5 +1,7 @@
 import ArrayBufferReader from './ArrayBufferReader.js';
 import BlobReader from './BlobReader.js';
+export * from './HTTPRangeReader.js';
+
 import {
   inflateRawAsync,
   setOptions as setWorkerOptions,
