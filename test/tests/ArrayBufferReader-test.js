@@ -35,15 +35,15 @@ describe('ArrayBufferReader', function() {
   });
 
   describe('typedArray', function() {
-    const ab = new ArrayBuffer(100);
-    const f = new Float32Array(ab);
+    const ab = new ArrayBuffer(300);
+    const f = new Float32Array(ab, 60, 100 / 4);
     f.set([11, 22, 33], 0);
     f.set([44, 55, 66], 100 / 4 - 12 / 4);
     const reader = new ArrayBufferReader(f);
 
     it('should have the correct length', async() => {
       const length = await reader.getLength();
-      assert.equal(length, ab.byteLength);
+      assert.equal(length, f.byteLength);
     });
 
     it('should work at 0 offset', async() => {
