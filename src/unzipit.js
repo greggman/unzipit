@@ -162,7 +162,7 @@ async function findEndOfCentralDirector(reader, totalLength) {
     }
 
     // 0 - End of central directory signature
-    const eocdr = new Uint8Array(data.buffer, data.byteOffset + i);
+    const eocdr = new Uint8Array(data.buffer, data.byteOffset + i, data.byteLength - i);
     // 4 - Number of this disk
     const diskNumber = getUint16LE(eocdr, 4);
     if (diskNumber !== 0) {
@@ -185,7 +185,7 @@ async function findEndOfCentralDirector(reader, totalLength) {
 
     // 22 - Comment
     // the encoding is always cp437.
-    const commentBytes = new Uint8Array(eocdr.buffer, 22, commentLength);
+    const commentBytes = new Uint8Array(eocdr.buffer, eocdr.byteOffset + 22, commentLength);
     const comment = decodeBuffer(commentBytes);
 
     if (entryCount === 0xffff || centralDirectoryOffset === 0xffffffff) {

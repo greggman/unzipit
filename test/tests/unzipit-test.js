@@ -342,6 +342,48 @@ describe('unzipit', function() {
 
   });
 
+  describe('Uint8Array', () => {
+
+    let stuffZipUint8Array;
+    let test64ZipUint8Array;
+    let largeZipUint8Array;
+
+    async function getUint8Array(url) {
+      const req = await fetch(url);
+      const arrayBuffer = await req.arrayBuffer();
+      const data = new Uint8Array(arrayBuffer);
+      const sig = await sha256(data);
+      assert.equal(sig, filesSHA256[url]);
+      // add offset so we can test it works with an offset
+      const extraStartEnd = 75127;
+      const buf = new Uint8Array(data.length + extraStartEnd * 2);
+      buf.set(data, extraStartEnd);
+      return new Uint8Array(buf.buffer, extraStartEnd, data.length);
+    }
+
+    before(async() => {
+      stuffZipUint8Array = await getUint8Array('./data/stuff.zip');
+      test64ZipUint8Array = await getUint8Array('./data/test64.zip');
+      largeZipUint8Array = await getUint8Array('./data/large.zip');
+    });
+
+    addTopTests({
+      async loadStuffZip() {
+        return await unzip(stuffZipUint8Array);
+      },
+      async loadStuffZipRaw() {
+        return await unzipRaw(stuffZipUint8Array);
+      },
+      async loadTest64Zip() {
+        return await unzip(test64ZipUint8Array);
+      },
+      async loadLargeZip() {
+        return await unzip(largeZipUint8Array);
+      },
+    });
+
+  });
+
   describe('Blob', () => {
 
     let stuffZipBlob;

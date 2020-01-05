@@ -2,14 +2,14 @@ import {isSharedArrayBuffer} from './utils.js';
 
 export default class ArrayBufferReader {
   constructor(arrayBufferOrView) {
-    this.buffer = (arrayBufferOrView instanceof ArrayBuffer || isSharedArrayBuffer(arrayBufferOrView))
-       ? arrayBufferOrView
-       : arrayBufferOrView.buffer;
+    this.typedArray = (arrayBufferOrView instanceof ArrayBuffer || isSharedArrayBuffer(arrayBufferOrView))
+       ? new Uint8Array(arrayBufferOrView)
+       : new Uint8Array(arrayBufferOrView.buffer, arrayBufferOrView.byteOffset, arrayBufferOrView.byteLength);
   }
   async getLength() {
-    return this.buffer.byteLength;
+    return this.typedArray.byteLength;
   }
   async read(offset, length) {
-    return new Uint8Array(this.buffer, offset, length);
+    return new Uint8Array(this.typedArray.buffer, this.typedArray.byteOffset + offset, length);
   }
 }
