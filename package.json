@@ -1,6 +1,6 @@
 {
   "name": "unzipit",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "random access unzip library for JavaScript",
   "main": "dist/unzipit.js",
   "module": "dist/unzipit.module.js",
@@ -29,7 +29,7 @@
   "bugs": {
     "url": "https://github.com/greggman/unzipit/issues"
   },
-  "homepage": "https://github.com/greggman/unzipit#readme",
+  "homepage": "https://greggman.github.io/unzipit",
   "devDependencies": {
     "@types/chai": "^4.2.7",
     "chai": "^4.2.0",
