@@ -1,294 +1,4 @@
-/* unzipit@1.0.0, license MIT */
-function deflateRaw(data, out, opos, lvl) {	
-	var opts = [
-	/*
-		 ush good_length; /* reduce lazy search above this match length 
-		 ush max_lazy;    /* do not perform lazy search above this match length 
-         ush nice_length; /* quit search above this match length 
-	*/
-	/*      good lazy nice chain */
-	/* 0 */ [ 0,   0,   0,    0,0],  /* store only */
-	/* 1 */ [ 4,   4,   8,    4,0], /* max speed, no lazy matches */
-	/* 2 */ [ 4,   5,  16,    8,0],
-	/* 3 */ [ 4,   6,  16,   16,0],
-
-	/* 4 */ [ 4,  10,  16,   32,0],  /* lazy matches */
-	/* 5 */ [ 8,  16,  32,   32,0],
-	/* 6 */ [ 8,  16, 128,  128,0],
-	/* 7 */ [ 8,  32, 128,  256,0],
-	/* 8 */ [32, 128, 258, 1024,1],
-	/* 9 */ [32, 258, 258, 4096,1]]; /* max compression */
-	
-	var opt = opts[lvl];
-	
-	
-	var goodIndex = _goodIndex, putsE = _putsE;
-	var i = 0, pos = opos<<3, cvrd = 0, dlen = data.length;
-	
-	if(lvl==0) {
-		while(i<dlen) {   var len = Math.min(0xffff, dlen-i);
-			putsE(out, pos, (i+len==dlen ? 1 : 0));  pos = _copyExact(data, i, len, out, pos+8);  i += len;  }
-		return pos>>>3;
-	}
-
-	var lits = U.lits, strt=U.strt, prev=U.prev, li=0, lc=0, bs=0, ebits=0, c=0, nc=0;  // last_item, literal_count, block_start
-	if(dlen>2) {  nc=_hash(data,0);  strt[nc]=0;  }
-	
-	for(i=0; i<dlen; i++)  {
-		c = nc;
-		//*
-		if(i+1<dlen-2) {
-			nc = _hash(data, i+1);
-			var ii = ((i+1)&0x7fff);
-			prev[ii]=strt[nc];
-			strt[nc]=ii;
-		} //*/
-		if(cvrd<=i) {
-			if((li>14000 || lc>26697) && (dlen-i)>100) {
-				if(cvrd<i) {  lits[li]=i-cvrd;  li+=2;  cvrd=i;  }
-				pos = _writeBlock(((i==dlen-1) || (cvrd==dlen))?1:0, lits, li, ebits, data,bs,i-bs, out, pos);  li=lc=ebits=0;  bs=i;
-			}
-			
-			var mch = 0;
-			//if(nmci==i) mch= nmch;  else 
-			if(i<dlen-2) mch = _bestMatch(data, i, prev, c, Math.min(opt[2],dlen-i), opt[3]);
-			/*
-			if(mch!=0 && opt[4]==1 && (mch>>>16)<opt[1] && i+1<dlen-2) {
-				nmch = _bestMatch(data, i+1, prev, nc, opt[2], opt[3]);  nmci=i+1;
-				//var mch2 = _bestMatch(data, i+2, prev, nnc);  //nmci=i+1;
-				if((nmch>>>16)>(mch>>>16)) mch=0;
-			}//*/
-			var len = mch>>>16, dst = mch&0xffff;  //if(i-dst<0) throw "e";
-			if(mch!=0) { 
-				var len = mch>>>16, dst = mch&0xffff;  //if(i-dst<0) throw "e";
-				var lgi = goodIndex(len, U.of0);  U.lhst[257+lgi]++; 
-				var dgi = goodIndex(dst, U.df0);  U.dhst[    dgi]++;  ebits += U.exb[lgi] + U.dxb[dgi]; 
-				lits[li] = (len<<23)|(i-cvrd);  lits[li+1] = (dst<<16)|(lgi<<8)|dgi;  li+=2;
-				cvrd = i + len;  
-			}
-			else {	U.lhst[data[i]]++;  }
-			lc++;
-		}
-	}
-	if(bs!=i || data.length==0) {
-		if(cvrd<i) {  lits[li]=i-cvrd;  li+=2;  cvrd=i;  }
-		pos = _writeBlock(1, lits, li, ebits, data,bs,i-bs, out, pos);  li=0;  lc=0;  li=lc=ebits=0;  bs=i;
-	}
-	while((pos&7)!=0) pos++;
-	return pos>>>3;
-}
-function _bestMatch(data, i, prev, c, nice, chain) {
-	var ci = (i&0x7fff), pi=prev[ci];  
-	//console.log("----", i);
-	var dif = ((ci-pi + (1<<15)) & 0x7fff);  if(pi==ci || c!=_hash(data,i-dif)) return 0;
-	var tl=0, td=0;  // top length, top distance
-	var dlim = Math.min(0x7fff, i);
-	while(dif<=dlim && --chain!=0 && pi!=ci /*&& c==_hash(data,i-dif)*/) {
-		if(tl==0 || (data[i+tl]==data[i+tl-dif])) {
-			var cl = _howLong(data, i, dif);
-			if(cl>tl) {  
-				tl=cl;  td=dif;  if(tl>=nice) break;    //* 
-				if(dif+2<cl) cl = dif+2;
-				var maxd = 0; // pi does not point to the start of the word
-				for(var j=0; j<cl-2; j++) {
-					var ei =  (i-dif+j+ (1<<15)) & 0x7fff;
-					var li = prev[ei];
-					var curd = (ei-li + (1<<15)) & 0x7fff;
-					if(curd>maxd) {  maxd=curd;  pi = ei; }
-				}  //*/
-			}
-		}
-		
-		ci=pi;  pi = prev[ci];
-		dif += ((ci-pi + (1<<15)) & 0x7fff);
-	}
-	return (tl<<16)|td;
-}
-function _howLong(data, i, dif) {
-	if(data[i]!=data[i-dif] || data[i+1]!=data[i+1-dif] || data[i+2]!=data[i+2-dif]) return 0;
-	var oi=i, l = Math.min(data.length, i+258);  i+=3;
-	//while(i+4<l && data[i]==data[i-dif] && data[i+1]==data[i+1-dif] && data[i+2]==data[i+2-dif] && data[i+3]==data[i+3-dif]) i+=4;
-	while(i<l && data[i]==data[i-dif]) i++;
-	return i-oi;
-}
-function _hash(data, i) {
-	return (((data[i]<<8) | data[i+1])+(data[i+2]<<4))&0xffff;
-	//var hash_shift = 0, hash_mask = 255;
-	//var h = data[i+1] % 251;
-	//h = (((h << 8) + data[i+2]) % 251);
-	//h = (((h << 8) + data[i+2]) % 251);
-	//h = ((h<<hash_shift) ^ (c) ) & hash_mask;
-	//return h | (data[i]<<8);
-	//return (data[i] | (data[i+1]<<8));
-}
-//UZIP.___toth = 0;
-//UZIP.saved = 0;
-function _writeBlock(BFINAL, lits, li, ebits, data,o0,l0, out, pos) {
-	var putsF = _putsF, putsE = _putsE;
-	
-	//*
-	var T, ML, MD, MH, numl, numd, numh, lset, dset;  U.lhst[256]++;
-	T = getTrees(); ML=T[0]; MD=T[1]; MH=T[2]; numl=T[3]; numd=T[4]; numh=T[5]; lset=T[6]; dset=T[7];
-	
-	var cstSize = (((pos+3)&7)==0 ? 0 : 8-((pos+3)&7)) + 32 + (l0<<3);
-	var fxdSize = ebits + contSize(U.fltree, U.lhst) + contSize(U.fdtree, U.dhst);
-	var dynSize = ebits + contSize(U.ltree , U.lhst) + contSize(U.dtree , U.dhst);
-	dynSize    += 14 + 3*numh + contSize(U.itree, U.ihst) + (U.ihst[16]*2 + U.ihst[17]*3 + U.ihst[18]*7);
-	
-	for(var j=0; j<286; j++) U.lhst[j]=0;   for(var j=0; j<30; j++) U.dhst[j]=0;   for(var j=0; j<19; j++) U.ihst[j]=0;
-	//*/
-	var BTYPE = (cstSize<fxdSize && cstSize<dynSize) ? 0 : ( fxdSize<dynSize ? 1 : 2 );
-	putsF(out, pos, BFINAL);  putsF(out, pos+1, BTYPE);  pos+=3;
-	if(BTYPE==0) {
-		while((pos&7)!=0) pos++;
-		pos = _copyExact(data, o0, l0, out, pos);
-	}
-	else {
-		var ltree, dtree;
-		if(BTYPE==1) {  ltree=U.fltree;  dtree=U.fdtree;  }
-		if(BTYPE==2) {	
-			makeCodes(U.ltree, ML);  revCodes(U.ltree, ML);
-			makeCodes(U.dtree, MD);  revCodes(U.dtree, MD);
-			makeCodes(U.itree, MH);  revCodes(U.itree, MH);
-			
-			ltree = U.ltree;  dtree = U.dtree;
-			
-			putsE(out, pos,numl-257);  pos+=5;  // 286
-			putsE(out, pos,numd-  1);  pos+=5;  // 30
-			putsE(out, pos,numh-  4);  pos+=4;  // 19
-			
-			for(var i=0; i<numh; i++) putsE(out, pos+i*3, U.itree[(U.ordr[i]<<1)+1]);   pos+=3* numh;
-			pos = _codeTiny(lset, U.itree, out, pos);
-			pos = _codeTiny(dset, U.itree, out, pos);
-		}
-		
-		var off=o0;
-		for(var si=0; si<li; si+=2) {
-			var qb=lits[si], len=(qb>>>23), end = off+(qb&((1<<23)-1));
-			while(off<end) pos = _writeLit(data[off++], ltree, out, pos);
-			
-			if(len!=0) {
-				var qc = lits[si+1], dst=(qc>>16), lgi=(qc>>8)&255, dgi=(qc&255);
-				pos = _writeLit(257+lgi, ltree, out, pos);
-				putsE(out, pos, len-U.of0[lgi]);  pos+=U.exb[lgi];
-				
-				pos = _writeLit(dgi, dtree, out, pos);
-				putsF(out, pos, dst-U.df0[dgi]);  pos+=U.dxb[dgi];  off+=len;
-			}
-		}
-		pos = _writeLit(256, ltree, out, pos);
-	}
-	//console.log(pos-opos, fxdSize, dynSize, cstSize);
-	return pos;
-}
-function _copyExact(data,off,len,out,pos) {
-	var p8 = (pos>>>3);
-	out[p8]=(len);  out[p8+1]=(len>>>8);  out[p8+2]=255-out[p8];  out[p8+3]=255-out[p8+1];  p8+=4;
-	out.set(new Uint8Array(data.buffer, off, len), p8);
-	//for(var i=0; i<len; i++) out[p8+i]=data[off+i];
-	return pos + ((len+4)<<3);
-}
-/*
-	Interesting facts:
-	- decompressed block can have bytes, which do not occur in a Huffman tree (copied from the previous block by reference)
-*/
-
-function getTrees() {
-	var ML = _hufTree(U.lhst, U.ltree, 15);
-	var MD = _hufTree(U.dhst, U.dtree, 15);
-	var lset = [], numl = _lenCodes(U.ltree, lset);
-	var dset = [], numd = _lenCodes(U.dtree, dset);
-	for(var i=0; i<lset.length; i+=2) U.ihst[lset[i]]++;
-	for(var i=0; i<dset.length; i+=2) U.ihst[dset[i]]++;
-	var MH = _hufTree(U.ihst, U.itree,  7);
-	var numh = 19;  while(numh>4 && U.itree[(U.ordr[numh-1]<<1)+1]==0) numh--;
-	return [ML, MD, MH, numl, numd, numh, lset, dset];
-}
-function getSecond(a) {  var b=[];  for(var i=0; i<a.length; i+=2) b.push  (a[i+1]);  return b;  }
-function nonZero(a) {  var b= "";  for(var i=0; i<a.length; i+=2) if(a[i+1]!=0)b+=(i>>1)+",";  return b;  }
-function contSize(tree, hst) {  var s=0;  for(var i=0; i<hst.length; i++) s+= hst[i]*tree[(i<<1)+1];  return s;  }
-function _codeTiny(set, tree, out, pos) {
-	for(var i=0; i<set.length; i+=2) {
-		var l = set[i], rst = set[i+1];  //console.log(l, pos, tree[(l<<1)+1]);
-		pos = _writeLit(l, tree, out, pos);
-		var rsl = l==16 ? 2 : (l==17 ? 3 : 7);
-		if(l>15) {  _putsE(out, pos, rst);  pos+=rsl;  }
-	}
-	return pos;
-}
-function _lenCodes(tree, set) {
-	var len=tree.length;  while(len!=2 && tree[len-1]==0) len-=2;  // when no distances, keep one code with length 0
-	for(var i=0; i<len; i+=2) {
-		var l = tree[i+1], nxt = (i+3<len ? tree[i+3]:-1),  nnxt = (i+5<len ? tree[i+5]:-1),  prv = (i==0 ? -1 : tree[i-1]);
-		if(l==0 && nxt==l && nnxt==l) {
-			var lz = i+5;
-			while(lz+2<len && tree[lz+2]==l) lz+=2;
-			var zc = Math.min((lz+1-i)>>>1, 138);
-			if(zc<11) set.push(17, zc-3);
-			else set.push(18, zc-11);
-			i += zc*2-2;
-		}
-		else if(l==prv && nxt==l && nnxt==l) {
-			var lz = i+5;
-			while(lz+2<len && tree[lz+2]==l) lz+=2;
-			var zc = Math.min((lz+1-i)>>>1, 6);
-			set.push(16, zc-3);
-			i += zc*2-2;
-		}
-		else set.push(l, 0);
-	}
-	return len>>>1;
-}
-function _hufTree(hst, tree, MAXL) {
-	var list=[], hl = hst.length, tl=tree.length, i=0;
-	for(i=0; i<tl; i+=2) {  tree[i]=0;  tree[i+1]=0;  }	
-	for(i=0; i<hl; i++) if(hst[i]!=0) list.push({lit:i, f:hst[i]});
-	var end = list.length, l2=list.slice(0);
-	if(end==0) return 0;  // empty histogram (usually for dist)
-	if(end==1) {  var lit=list[0].lit, l2=lit==0?1:0;  tree[(lit<<1)+1]=1;  tree[(l2<<1)+1]=1;  return 1;  }
-	list.sort(function(a,b){return a.f-b.f;});
-	var a=list[0], b=list[1], i0=0, i1=1, i2=2;  list[0]={lit:-1,f:a.f+b.f,l:a,r:b,d:0};
-	while(i1!=end-1) {
-		if(i0!=i1 && (i2==end || list[i0].f<list[i2].f)) {  a=list[i0++];  }  else {  a=list[i2++];  }
-		if(i0!=i1 && (i2==end || list[i0].f<list[i2].f)) {  b=list[i0++];  }  else {  b=list[i2++];  }
-		list[i1++]={lit:-1,f:a.f+b.f, l:a,r:b};
-	}
-	var maxl = setDepth(list[i1-1], 0);
-	if(maxl>MAXL) {  restrictDepth(l2, MAXL, maxl);  maxl = MAXL;  }
-	for(i=0; i<end; i++) tree[(l2[i].lit<<1)+1]=l2[i].d;
-	return maxl;
-}
-
-function setDepth(t, d) {
-	if(t.lit!=-1) {  t.d=d;  return d;  }
-	return Math.max( setDepth(t.l, d+1),  setDepth(t.r, d+1) );
-}
-
-function restrictDepth(dps, MD, maxl) {
-	var i=0, bCost=1<<(maxl-MD), dbt=0;
-	dps.sort(function(a,b){return b.d==a.d ? a.f-b.f : b.d-a.d;});
-	
-	for(i=0; i<dps.length; i++) if(dps[i].d>MD) {  var od=dps[i].d;  dps[i].d=MD;  dbt+=bCost-(1<<(maxl-od));  }  else break;
-	dbt = dbt>>>(maxl-MD);
-	while(dbt>0) {  var od=dps[i].d;  if(od<MD) {  dps[i].d++;  dbt-=(1<<(MD-od-1));  }  else  i++;  }
-	for(; i>=0; i--) if(dps[i].d==MD && dbt<0) {  dps[i].d--;  dbt++;  }  if(dbt!=0) console.log("debt left");
-}
-
-function _goodIndex(v, arr) {
-	var i=0;  if(arr[i|16]<=v) i|=16;  if(arr[i|8]<=v) i|=8;  if(arr[i|4]<=v) i|=4;  if(arr[i|2]<=v) i|=2;  if(arr[i|1]<=v) i|=1;  return i;
-}
-function _writeLit(ch, ltree, out, pos) {
-	_putsF(out, pos, ltree[ch<<1]);
-	return pos+ltree[(ch<<1)+1];
-}
-
-
-
-
-
-
-
-
+/* unzipit@1.1.0, license MIT */
 function inflate(data, buf) {
 	var u8=Uint8Array;
 	if(data[0]==3 && data[1]==0) return (buf ? buf : new u8(0));
@@ -360,6 +70,7 @@ function inflate(data, buf) {
 				//if(stp>20) while(off<end) {  buf.copyWithin(off, o0, o0+stp);  off+=stp;  }  else
 				//if(end-dst<=off) buf.copyWithin(off, off-dst, end-dst);  else
 				//if(dst==1) buf.fill(buf[off-1], off, end);  else
+				if(noBuf) buf=_check(buf, off+(1<<17));
 				while(off<end) {  buf[off]=buf[off++-dst];    buf[off]=buf[off++-dst];  buf[off]=buf[off++-dst];  buf[off]=buf[off++-dst];  }   
 				off=end;
 				//while(off!=end) {  buf[off]=buf[off++-dst];  }
@@ -452,9 +163,6 @@ function revCodes(tree, MAX_BITS) {
 	for(var i=0; i<tree.length; i+=2) {  var i0 = (tree[i]<<(MAX_BITS-tree[i+1]));  tree[i] = r15[i0]>>>imb;  }
 }
 
-function _putsE(dt, pos, val   ) {  val = val<<(pos&7);  var o=(pos>>>3);  dt[o]|=val;  dt[o+1]|=(val>>>8);                        }
-function _putsF(dt, pos, val   ) {  val = val<<(pos&7);  var o=(pos>>>3);  dt[o]|=val;  dt[o+1]|=(val>>>8);  dt[o+2]|=(val>>>16);  }
-
 function _bitsE(dt, pos, length) {  return ((dt[pos>>>3] | (dt[(pos>>>3)+1]<<8)                        )>>>(pos&7))&((1<<length)-1);  }
 function _bitsF(dt, pos, length) {  return ((dt[pos>>>3] | (dt[(pos>>>3)+1]<<8) | (dt[(pos>>>3)+2]<<16))>>>(pos&7))&((1<<length)-1);  }
 /*
@@ -532,20 +240,6 @@ const U = function(){
 	*/
 })();
 
-var F = {
-  deflateRaw,
-  getTrees,
-  getSecond,
-  nonZero,
-  contSize,
-  setDepth,
-  restrictDepth,
-  inflate,
-  codes2map,
-  revCodes,
-  U,
-};
-
 const crc = {
 	table : ( function() {
 	   var tab = new Uint32Array(256);
@@ -564,7 +258,7 @@ const crc = {
 	crc : function(b,o,l)  {  return crc.update(0xffffffff,b,o,l) ^ 0xffffffff;  }
 };
 
-function inflateRaw(file, buf) {  return F.inflate(file, buf);  }
+function inflateRaw(file, buf) {  return inflate(file, buf);  }
 
 /* global SharedArrayBuffer, process */
 

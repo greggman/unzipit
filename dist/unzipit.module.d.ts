@@ -44,6 +44,10 @@ export type UnzipitOptions = {
 
 export type TypedArray = Int8Array | Uint8Array | Int16Array | Uint16Array | Int32Array | Uint32Array | Float32Array;
 
+export class HTTPRangeReader {
+	constructor(url: string);
+}
+
 export function unzip(src: string | ArrayBuffer | TypedArray | Blob | Reader): Promise<ZipInfo>;
 export function unzipRaw(src: string | ArrayBuffer | TypedArray | Blob | Reader): Promise<ZipInfoRaw>;
 export function setOptions(options: UnzipitOptions): void;
