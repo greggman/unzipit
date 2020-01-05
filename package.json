@@ -8,7 +8,7 @@
   "scripts": {
     "build": "npm run build-min && npm run build-ts",
     "build-normal": "rollup -c",
-    "build-min": "rollup -c && google-closure-compiler --warning_level=VERBOSE --jscomp_off=globalThis --jscomp_off=checkTypes --externs build/externs.js --language_in=ECMASCRIPT_2019 --language_out=ECMASCRIPT_2019 --js dist/unzipit.js --js_output_file dist/unzipit.min.js && google-closure-compiler --warning_level=VERBOSE --jscomp_off=globalThis --jscomp_off=checkTypes --externs build/externs.js --language_in=ECMASCRIPT_2019 --language_out=ECMASCRIPT_2019 --js dist/unzipit-worker.js --js_output_file dist/unzipit-worker.min.js",
+    "build-min": "rollup -c && google-closure-compiler --warning_level=VERBOSE --jscomp_off=globalThis --jscomp_off=checkTypes --externs build/externs.js --language_in=ECMASCRIPT_2019 --language_out=ECMASCRIPT_2019 --js dist/unzipit.js --js_output_file dist/unzipit.min.js && google-closure-compiler --warning_level=VERBOSE --jscomp_off=globalThis --jscomp_off=checkTypes --externs build/externs.js --language_in=ECMASCRIPT_2019 --language_out=ECMASCRIPT_2019 --js dist/unzipit-worker.js --js_output_file dist/unzipit-worker.min.js && node ./build/append-banner.js dist/unzipit.min.js dist/unzipit-worker.min.js",
     "build-ts": "node ./build/copy.js dist/unzipit.d.ts dist/unzipit.module.d.ts && tsc --lib es2019,dom,dom.iterable --target es2019 test/ts/ts-test.ts",
     "eslint": "eslint src/**/*.js test/tests/**/*.js",
     "test": "mocha test/node-test.js && node test/puppeteer.js"
