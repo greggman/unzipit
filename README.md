@@ -447,6 +447,10 @@ Of course you can also `npm test` to run them from the command line.
 
 Follow the instructions on testing but add  `?timeout=0` to the URL as in `http://localhost:8080/tests/?timeout=0`
 
+## Live Tests
+
+https://greggman.github.io/unzipit/test/
+
 # Acknowledgements
 
 The code is **heavily** based on [yauzl](https://github.com/thejoshwolfe/yauzl)
