@@ -28,9 +28,9 @@ async function test(port) {
   const browser = await puppeteer.launch();
   const page = await browser.newPage();
 
-  page.on('console', (msg) => {
-    // Total Hack!
-    console.log(...msg.args().map(v => v.toString().substr(9)));
+  page.on('console', async e => {
+    const args = await Promise.all(e.args().map(a => a.jsonValue()));
+    console.log(...args);
   });
 
   let totalFailures = 0;
