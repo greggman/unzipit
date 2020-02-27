@@ -459,7 +459,7 @@ If you want to cache entires implement that at a level above unzipit
 If your server supports http range requests you can do this.
 
 ```js
-import {unzip} from 'unzipit, HTTPRangeReader';
+import {unzip, HTTPRangeReader} from 'unzipit';
 
 async function readFiles(url) {
   const reader = new HTTPRangeReader(url);
