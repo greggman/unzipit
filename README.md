@@ -401,7 +401,7 @@ read that way but are perfectly valid zip files.
 If your server supports http range requests you can do this.
 
 ```js
-import {unzip} from 'unzipit, HTTPRangeReader';
+import {unzip, HTTPRangeReader} from 'unzipit';
 
 async function readFiles(url) {
   const reader = new HTTPRangeReader(url);
