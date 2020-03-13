@@ -1,4 +1,4 @@
-/* global require */
+/* global require, module */
 
 import {inflateRaw} from 'uzip-module';
 import {isNode, isBlob, readBlobAsUint8Array} from './utils';
@@ -60,9 +60,14 @@ function startWorker(url) {
   });
 }
 
+function dynamicRequire(mod, request) {
+  return mod.require(request);
+}
+
 const workerHelper = (function() {
   if (isNode) {
-    const {Worker} = require('worker_threads');
+    // We need to use `dynamicRequire` because `require` on it's own will be optimized by webpack.
+    const {Worker} = dynamicRequire(module, 'worker_threads');
     return {
       async createWorker(url) {
         return new Worker(url);
