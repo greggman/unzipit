@@ -1,4 +1,4 @@
-/* unzipit@1.1.3, license MIT */
+/* unzipit@1.1.4, license MIT */
 /* global SharedArrayBuffer, process */
 
 function readBlobAsArrayBuffer(blob) {
@@ -355,7 +355,7 @@ const crc = {
 
 function inflateRaw(file, buf) {  return inflate(file, buf);  }
 
-/* global require */
+/* global require, module */
 
 const config = {
   numWorkers: 1,
@@ -414,9 +414,14 @@ function startWorker(url) {
   });
 }
 
+function dynamicRequire(mod, request) {
+  return mod.require(request);
+}
+
 const workerHelper = (function() {
   if (isNode) {
-    const {Worker} = require('worker_threads');
+    // We need to use `dynamicRequire` because `require` on it's own will be optimized by webpack.
+    const {Worker} = dynamicRequire(module, 'worker_threads');
     return {
       async createWorker(url) {
         return new Worker(url);
