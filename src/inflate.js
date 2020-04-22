@@ -1,4 +1,4 @@
-/* global require, module */
+/* global module */
 
 import {inflateRaw} from 'uzip-module';
 import {isNode, isBlob, readBlobAsUint8Array} from './utils';
