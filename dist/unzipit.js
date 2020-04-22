@@ -1,4 +1,4 @@
-/* unzipit@1.1.4, license MIT */
+/* unzipit@1.1.5, license MIT */
 (function (global, factory) {
   typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
   typeof define === 'function' && define.amd ? define(['exports'], factory) :
@@ -361,7 +361,7 @@
 
   function inflateRaw(file, buf) {  return inflate(file, buf);  }
 
-  /* global require, module */
+  /* global module */
 
   const config = {
     numWorkers: 1,
