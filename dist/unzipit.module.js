@@ -1,4 +1,4 @@
-/* unzipit@1.1.5, license MIT */
+/* unzipit@1.2.0, license MIT */
 /* global SharedArrayBuffer, process */
 
 function readBlobAsArrayBuffer(blob) {
@@ -802,6 +802,7 @@ async function findEndOfCentralDirector(reader, totalLength) {
     // 10 - Total number of central directory records
     const entryCount = getUint16LE(eocdr, 10);
     // 12 - Size of central directory (bytes)
+    const centralDirectorySize = getUint32LE(eocdr, 12);
     // 16 - Offset of start of central directory, relative to start of archive
     const centralDirectoryOffset = getUint32LE(eocdr, 16);
     // 20 - Comment length
@@ -819,7 +820,7 @@ async function findEndOfCentralDirector(reader, totalLength) {
     if (entryCount === 0xffff || centralDirectoryOffset === 0xffffffff) {
       return await readZip64CentralDirectory(reader, readStart + i, comment, commentBytes);
     } else {
-      return await readEntries(reader, centralDirectoryOffset, entryCount, comment, commentBytes);
+      return await readEntries(reader, centralDirectoryOffset, centralDirectorySize, entryCount, comment, commentBytes);
     }
   }
 
@@ -859,20 +860,22 @@ async function readZip64CentralDirectory(reader, offset, comment, commentBytes) 
   // 32 - total number of entries in the central directory            8 bytes
   const entryCount = getUint64LE(zip64Eocdr, 32);
   // 40 - size of the central directory                               8 bytes
+  const centralDirectorySize = getUint64LE(zip64Eocdr, 40);
   // 48 - offset of start of central directory with respect to the starting disk number     8 bytes
   const centralDirectoryOffset = getUint64LE(zip64Eocdr, 48);
   // 56 - zip64 extensible data sector                                (variable size)
-  return readEntries(reader, centralDirectoryOffset, entryCount, comment, commentBytes);
+  return readEntries(reader, centralDirectoryOffset, centralDirectorySize, entryCount, comment, commentBytes);
 }
 
 const CENTRAL_DIRECTORY_FILE_HEADER_SIGNATURE = 0x02014b50;
 
-async function readEntries(reader, centralDirectoryOffset, entryCount, comment, commentBytes) {
-  let readEntryCursor = centralDirectoryOffset;
+async function readEntries(reader, centralDirectoryOffset, centralDirectorySize, entryCount, comment, commentBytes) {
+  let readEntryCursor = 0;
+  const allEntriesBuffer = await readAs(reader, centralDirectoryOffset, centralDirectorySize);
   const entries = [];
 
   for (let e = 0; e < entryCount; ++e) {
-    const buffer = await readAs(reader, readEntryCursor, 46);
+    const buffer = allEntriesBuffer.subarray(readEntryCursor, readEntryCursor + 46);
     // 0 - Central directory file header signature
     const signature = getUint32LE(buffer, 0);
     if (signature !== CENTRAL_DIRECTORY_FILE_HEADER_SIGNATURE) {
@@ -918,7 +921,7 @@ async function readEntries(reader, centralDirectoryOffset, entryCount, comment, 
 
     readEntryCursor += 46;
 
-    const data = await readAs(reader, readEntryCursor, entry.fileNameLength + entry.extraFieldLength + entry.fileCommentLength);
+    const data = allEntriesBuffer.subarray(readEntryCursor, readEntryCursor + entry.fileNameLength + entry.extraFieldLength + entry.fileCommentLength);
     entry.nameBytes = data.slice(0, entry.fileNameLength);
     entry.name = decodeBuffer(entry.nameBytes);
 
