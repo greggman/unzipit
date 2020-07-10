@@ -1,4 +1,4 @@
-/* global mocha, chai */
+/* global mocha */
 import './tests/ArrayBufferReader-test.js';
 import './tests/BlobReader-test.js';
 import './tests/unzipit-test.js';
