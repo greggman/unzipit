@@ -76,29 +76,38 @@
   }
 
   class HTTPRangeReader {
-        constructor(url) {
-          this.url = url;
+    constructor(url) {
+      this.url = url;
+    }
+    async getLength() {
+      if (this.length === undefined) {
+        const req = await fetch(this.url, { method: 'HEAD' });
+        if (!req.ok) {
+          throw new Error(`failed http request ${this.url}, status: ${req.status}: ${req.statusText}`);
         }
-        async getLength() {
-          if (this.length === undefined) {
-            const req = await fetch(this.url, { method: 'HEAD' });
-            this.length = parseInt(req.headers.get('content-length'));
-            if (Number.isNaN(this.length)) {
-              throw Error('could not get length');
-            }
-          }
-          return this.length;
-        }
-        async read(offset, size) {
-          const req = await fetch(this.url, {
-            headers: {
-              Range: `bytes=${offset}-${offset + size - 1}`,
-            },
-          });
-          const buffer = await req.arrayBuffer();
-          return new Uint8Array(buffer);
+        this.length = parseInt(req.headers.get('content-length'));
+        if (Number.isNaN(this.length)) {
+          throw Error('could not get length');
         }
       }
+      return this.length;
+    }
+    async read(offset, size) {
+      if (size === 0) {
+        return new Uint8Array(0);
+      }
+      const req = await fetch(this.url, {
+        headers: {
+          Range: `bytes=${offset}-${offset + size - 1}`,
+        },
+      });
+      if (!req.ok) {
+        throw new Error(`failed http request ${this.url}, status: ${req.status} offset: ${offset} size: ${size}: ${req.statusText}`);
+      }
+      const buffer = await req.arrayBuffer();
+      return new Uint8Array(buffer);
+    }
+  }
 
   function inflate(data, buf) {
   	var u8=Uint8Array;
@@ -459,6 +468,9 @@
           let text;
           try {
             const req = await fetch(url, {mode: 'cors'});
+            if (!req.ok) {
+              throw new Error(`could not load: ${url}`);
+            }
             text = await req.text();
             url = URL.createObjectURL(new Blob([text], {type: 'application/javascript'}));
             const worker = await startWorker(url);
@@ -682,6 +694,7 @@
       this.compressionMethod = entry.compressionMethod;
       this.lastModDate = dosDateTimeToDate(entry.lastModFileDate, entry.lastModFileTime);
       this.isDirectory = entry.uncompressedSize === 0 && entry.name.endsWith('/');
+      this.encrypted = !!(entry.generalPurposeBitFlag & 0x1);
     }
     // returns a promise that returns a Blob for this entry
     async blob(type = 'application/octet-stream') {
@@ -1020,6 +1033,7 @@
           throw new Error(`compressed/uncompressed size mismatch for stored file: ${entry.compressedSize} != ${entry.uncompressedSize}`);
         }
       }
+
       entries.push(entry);
     }
     const zip = {
@@ -1033,6 +1047,9 @@
   }
 
   async function readEntryDataHeader(reader, entry) {
+    if (entry.generalPurposeBitFlag & 0x1) {
+      throw new Error('encrypted entries not supported');
+    }
     const buffer = await readAs(reader, entry.relativeOffsetOfLocalHeader, 30);
     // note: maybe this should be passed in or cached on entry
     // as it's async so there will be at least one tick (not sure about that)
@@ -1139,6 +1156,9 @@
       reader = new ArrayBufferReader(source);
     } else if (typeof source === 'string') {
       const req = await fetch(source);
+      if (!req.ok) {
+        throw new Error(`failed http request ${source}, status: ${req.status}: ${req.statusText}`);
+      }
       const blob = await req.blob();
       reader = new BlobReader(blob);
     } else if (typeof source.getLength === 'function' && typeof source.read === 'function') {
