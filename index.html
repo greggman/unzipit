@@ -70,6 +70,7 @@
 Random access unzip library for browser and node based JavaScript
 
 [![Build Status](https://travis-ci.org/greggman/unzipit.svg?branch=master)](https://travis-ci.org/greggman/unzipit)
+[[Live Tests](https://greggman.github.io/unzipit/test/)]
 
 * Less than 8k gzipped without workers, Less than 13k with.
 * [6x to 25x faster than JSZip](https://jsperf.com/jszip-vs-unzipit/4) without workers and even faster with
@@ -406,6 +407,7 @@ class ZipEntry {
   commentBytes: Uint8Array,         // the raw comment for this entry
   lastModDate: Date,                // a Date
   isDirectory: bool,                // True if directory
+  encrypted: bool,                  // True if encrypted
 }
 ```
 
@@ -456,6 +458,12 @@ If you want to cache entires implement that at a level above unzipit
 
 ## Streaming
 
+You can't stream zip files. The only valid way to read a zip file is to read the
+central directory which is at the end of the zip file. Sure there are zip files
+where you can cheat and read the local headers of each file but that is an invalid
+way to read a zip file and it's trivial to create zip files that will fail when
+read that way but are perfectly valid zip files.
+
 If your server supports http range requests you can do this.
 
 ```js
@@ -493,6 +501,26 @@ so you are free to decode the name using your own methods. See example above.
 
 If you pass in an `ArrayBuffer` or `SharedArrayBuffer` you need to keep the data unchanged
 until you're finished using the data. The library doesn't make a copy, it uses the buffer directly.
+
+## Handling giant entries
+
+There is no way for the library to know what "too large" means to you.
+The simple way to handle entries that are too large is to check their
+size before asking for their content.
+
+```js
+  const kMaxSize = 1024*1024*1024*2;  // 2gig
+  if (entry.size > kMaxSize) {
+    throw new Error('this entry is larger than your max supported size');
+  }
+  const data = await entry.arrayBuffer();
+  ...
+```
+
+## Encrypted, Password protected Files
+
+unzipit does not currently support encrypted zip files and will throw if you try to get the data for one.
+Put it on the TODO list 😅
 
 # Testing
 

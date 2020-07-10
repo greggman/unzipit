@@ -342,6 +342,7 @@ class ZipEntry {
   commentBytes: Uint8Array,         // the raw comment for this entry
   lastModDate: Date,                // a Date
   isDirectory: bool,                // True if directory
+  encrypted: bool,                  // True if encrypted
 }
 ```
 
@@ -435,6 +436,26 @@ so you are free to decode the name using your own methods. See example above.
 
 If you pass in an `ArrayBuffer` or `SharedArrayBuffer` you need to keep the data unchanged
 until you're finished using the data. The library doesn't make a copy, it uses the buffer directly.
+
+## Handling giant entries
+
+There is no way for the library to know what "too large" means to you.
+The simple way to handle entries that are too large is to check their
+size before asking for their content.
+
+```js
+  const kMaxSize = 1024*1024*1024*2;  // 2gig
+  if (entry.size > kMaxSize) {
+    throw new Error('this entry is larger than your max supported size');
+  }
+  const data = await entry.arrayBuffer();
+  ...
+```
+
+## Encrypted, Password protected Files
+
+unzipit does not currently support encrypted zip files and will throw if you try to get the data for one.
+Put it on the TODO list 😅
 
 # Testing
 
