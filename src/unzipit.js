@@ -508,6 +508,9 @@ export async function unzipRaw(source) {
     reader = new ArrayBufferReader(source);
   } else if (typeof source === 'string') {
     const req = await fetch(source);
+    if (!req.ok) {
+      throw new Error(`failed http request ${source}, status: ${req.status}: ${req.statusText}`);
+    }
     const blob = await req.blob();
     reader = new BlobReader(blob);
   } else if (typeof source.getLength === 'function' && typeof source.read === 'function') {

@@ -99,6 +99,9 @@ const workerHelper = (function() {
         let text;
         try {
           const req = await fetch(url, {mode: 'cors'});
+          if (!req.ok) {
+            throw new Error(`could not load: ${url}`);
+          }
           text = await req.text();
           url = URL.createObjectURL(new Blob([text], {type: 'application/javascript'}));
           const worker = await startWorker(url);
