@@ -5,6 +5,7 @@
     "Uint",
     "eocdl",
     "transferables",
-    "unzipit"
+    "unzipit",
+    "zipcrypto"
   ]
 }
