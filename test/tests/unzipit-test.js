@@ -4,6 +4,16 @@ const assert = chai.assert;
 import {unzip, unzipRaw, setOptions, cleanup, HTTPRangeReader} from '../../dist/unzipit.module.js';
 import {readBlobAsArrayBuffer} from '../../src/utils.js';
 
+async function assertThrowsAsync(method, msg = '') {
+  let error = null;
+  try {
+    await method();
+  } catch (err) {
+    error = err;
+  }
+  assert.instanceOf(error, Error, msg);
+}
+
 async function strictFetch(...args) {
   const req = await fetch(...args);
   if (!req.ok) {
@@ -24,9 +34,11 @@ async function sha256(uint8View) {
 }
 
 const filesSHA256 = {
-  './data/large.zip':  'c93b2587bf27b998887c9a281a6711ff4144047dcb6f10b1459bed9cfdaef377',
+  './data/large.zip': 'c93b2587bf27b998887c9a281a6711ff4144047dcb6f10b1459bed9cfdaef377',
   './data/test64.zip': 'b2a15c3f415ba4f6386b840c6d82e5b70d32b554cb2dd070f588b52aac968ec9',
-  './data/stuff.zip':  '5874f0e9c553daec6a1f2e49992d474353c52a73584317a7122de59e35554608',
+  './data/stuff.zip': '5874f0e9c553daec6a1f2e49992d474353c52a73584317a7122de59e35554608',
+  './data/zip-with-zipcrypto-password-test.zip': '64d358059acc469de98a55afa5dda26dd127b1f57b2f0379f4e22f590df1176c',
+  './data/zip-with-aes-256-password-test.zip': 'c560801a8043c09320ed1a427a03f83931a51b68f6c3e061c5ee6896f1d49861',
 };
 
 describe('unzipit', function() {
@@ -55,26 +67,36 @@ describe('unzipit', function() {
     'large/cherry-blossoms-tokyo.jpg':     { sha256: '07c398b3acc1edc5ef47bd7c1da2160d66f9c297d2967e30f2009f79b5e6eb0e', },
   };
 
+  const expectedEncrypted = {
+    'zip-with-password-test/':                 { isDir: true, size: 0, },
+    'zip-with-password-test/compressed.txt':   { size: 1601, },
+    'zip-with-password-test/uncompressed.txt': { size: 7, },
+  };
+
   function onlyFiles(entries) {
     return Object.fromEntries(Object.entries(entries).filter(([, entry]) => !entry.isDirectory && !entry.isDir));
   }
 
-  async function checkZipEntriesMatchExpected(entries, expectedFiles) {
+  async function checkZipEntriesMatchExpected(entries, expectedFiles, checkContent = true) {
     const expected = Object.assign({}, expectedFiles);
     for (const [name, entry] of Object.entries(entries)) {
       const expect = expected[name];
       assert.isOk(expect, name);
       delete expected[name];
       assert.equal(entry.isDirectory, !!expect.isDir, name);
-      if (!expect.isDir) {
-        if (expect.sha256) {
-          const data = await entry.arrayBuffer();
-          const sig = await sha256(new Uint8Array(data));
-          assert.equal(sig, expect.sha256, name);
-        } else {
-          const data = await entry.text();
-          assert.equal(data, expect.content, name);
+      if (checkContent) {
+        if (!expect.isDir) {
+          if (expect.sha256) {
+            const data = await entry.arrayBuffer();
+            const sig = await sha256(new Uint8Array(data));
+            assert.equal(sig, expect.sha256, name);
+          } else {
+            const data = await entry.text();
+            assert.equal(data, expect.content, name);
+          }
         }
+      } else {
+        assert.equal(entry.size, expect.size, name);
       }
     }
     assert.deepEqual(expected, {}, 'all content accounted for');
@@ -163,6 +185,29 @@ describe('unzipit', function() {
         }
       }
     });
+
+    it('rejects encrypted zipCrypto entries', async() => {
+      const {entries} = await loader.load('./data/zip-with-zipcrypto-password-test.zip');
+      await checkZipEntriesMatchExpected(entries, expectedEncrypted, false);
+      await assertThrowsAsync(async() => {
+        await entries['zip-with-password-test/uncompressed.txt'].text();
+      });
+      await assertThrowsAsync(async() => {
+        await entries['zip-with-password-test/compressed.txt'].text();
+      });
+    });
+
+    it('rejects encrypted AES256 entries', async() => {
+      const {entries} = await loader.load('./data/zip-with-aes-256-password-test.zip');
+      await checkZipEntriesMatchExpected(entries, expectedEncrypted, false);
+      await assertThrowsAsync(async() => {
+        await entries['zip-with-password-test/uncompressed.txt'].text();
+      });
+      await assertThrowsAsync(async() => {
+        await entries['zip-with-password-test/compressed.txt'].text();
+      });
+    });
+
   }
 
   function addTopTests(loader) {

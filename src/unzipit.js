@@ -48,6 +48,7 @@ class ZipEntry {
     this.compressionMethod = entry.compressionMethod;
     this.lastModDate = dosDateTimeToDate(entry.lastModFileDate, entry.lastModFileTime);
     this.isDirectory = entry.uncompressedSize === 0 && entry.name.endsWith('/');
+    this.encrypted = !!(entry.generalPurposeBitFlag & 0x1);
   }
   // returns a promise that returns a Blob for this entry
   async blob(type = 'application/octet-stream') {
@@ -402,6 +403,9 @@ async function readEntries(reader, centralDirectoryOffset, centralDirectorySize,
 }
 
 async function readEntryDataHeader(reader, entry) {
+  if (entry.generalPurposeBitFlag & 0x1) {
+    throw new Error('encrypted entries not supported');
+  }
   const buffer = await readAs(reader, entry.relativeOffsetOfLocalHeader, 30);
   // note: maybe this should be passed in or cached on entry
   // as it's async so there will be at least one tick (not sure about that)
