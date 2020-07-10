@@ -497,9 +497,17 @@ until you're finished using the data. The library doesn't make a copy, it uses t
 # Testing
 
 When writing tests serve the folder with your favorite web server (recommend [`servez`](https://www.npmjs.com/package/servez))
-then go to `http://localhost:8080/test/` to easily re-run the tests.
+then go to `http://localhost:8080/test/` to easily re-run the tests. You can set a grep regular expression to only run certain tests
+`http://localhost:8080/test/?grep=json`. It's up to you to encode the regular expression for a URL. For example
 
-Of course you can also `npm test` to run them from the command line.
+```js
+encodeURIComponent('j(.*?)son')
+"j(.*%3F)son"
+```
+
+so `http://localhost:8080/test/?grep=j(.*%3F)son`. The regular expression will be marked as case insensitive.
+
+Of course you can also `npm test` to run the tests from the command line.
 
 ## Debugging
 
