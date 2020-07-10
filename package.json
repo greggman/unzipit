@@ -34,18 +34,18 @@
     "@types/chai": "^4.2.11",
     "@types/mocha": "^7.0.2",
     "chai": "^4.2.0",
-    "eslint": "^6.8.0",
+    "eslint": "^7.4.0",
     "eslint-plugin-html": "^6.0.2",
     "eslint-plugin-one-variable-per-var": "0.0.3",
     "eslint-plugin-optional-comma-spacing": "0.0.4",
     "eslint-plugin-require-trailing-comma": "0.0.1",
     "express": "^4.17.1",
-    "google-closure-compiler": "^20200406.0.0",
-    "mocha": "^7.1.1",
-    "puppeteer": "^3.0.0",
-    "rollup": "^2.7.1",
+    "google-closure-compiler": "^20200628.0.0",
+    "mocha": "^8.0.1",
+    "puppeteer": "^5.0.0",
+    "rollup": "^2.21.0",
     "rollup-plugin-node-resolve": "^5.2.0",
-    "typescript": "^3.8.3"
+    "typescript": "^3.9.6"
   },
   "dependencies": {
     "uzip-module": "^1.0.2"
