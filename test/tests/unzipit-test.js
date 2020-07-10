@@ -4,6 +4,13 @@ const assert = chai.assert;
 import {unzip, unzipRaw, setOptions, cleanup, HTTPRangeReader} from '../../dist/unzipit.module.js';
 import {readBlobAsArrayBuffer} from '../../src/utils.js';
 
+async function strictFetch(...args) {
+  const req = await fetch(...args);
+  if (!req.ok) {
+    throw new Error(`could not fetch: ${args.join('\n')}`);
+  }
+  return req;
+}
 
 async function readBlobAsUint8Array(blob) {
   const arrayBuffer = await readBlobAsArrayBuffer(blob);
@@ -75,7 +82,7 @@ describe('unzipit', function() {
 
   function addTests(loader) {
     it('has all entries', async() => {
-      const {zip, entries} = await loader.loadStuffZip();
+      const {zip, entries} = await loader.load('./data/stuff.zip');
 
       assert.typeOf(zip.comment, 'string');
       assert.instanceOf(zip.commentBytes, Uint8Array);
@@ -83,17 +90,17 @@ describe('unzipit', function() {
     });
 
     it('entries are correct', async() => {
-      const {entries} = await loader.loadStuffZip();
+      const {entries} = await loader.load('./data/stuff.zip');
       await checkZipEntriesMatchExpected(entries, expectedStuff);
     });
 
     it('unzipRaw works', async() => {
-      const {entries} = await loader.loadStuffZipRaw();
+      const {entries} = await loader.loadRaw('./data/stuff.zip');
       await checkZipEntriesMatchExpected(Object.fromEntries(entries.map(v => [v.name, v])), expectedStuff);
     });
 
     it('works with zip64', async() => {
-      const {entries} = await loader.loadTest64Zip();
+      const {entries} = await loader.load('./data/test64.zip');
       const expected = {
         'test64/': { isDir: true, },
         'test64/banana.txt': { content: '2 bananas\n', },
@@ -104,12 +111,12 @@ describe('unzipit', function() {
     });
 
     it('works with large zip (not that large)', async() => {
-      const {entries} = await loader.loadLargeZip();
+      const {entries} = await loader.load('./data/large.zip');
       await checkZipEntriesMatchExpected(entries, expectedLarge);
     });
 
     it('can get blob', async() => {
-      const {entries} = await loader.loadStuffZip();
+      const {entries} = await loader.load('./data/stuff.zip');
       const tests = [
         { name: 'stuff/dog.txt', compressionMethod: 0, expected: utf8Encoder.encode('german shepard\n'), },
         { name: 'stuff/long.txt', compressionMethod: 8, expected: utf8Encoder.encode(longContent), },
@@ -124,13 +131,13 @@ describe('unzipit', function() {
     });
 
     it('can get json', async() => {
-      const {entries} = await loader.loadStuffZip();
+      const {entries} = await loader.load('./data/stuff.zip');
       const data = await entries['stuff/json.txt'].json();
       assert.deepEqual(data, {name: 'homer', age: 50});
     });
 
     it('can get arrayBuffer', async() => {
-      const {entries} = await loader.loadStuffZip();
+      const {entries} = await loader.load('./data/stuff.zip');
       const tests = [
         { name: 'stuff/dog.txt', compressionMethod: 0, expected: utf8Encoder.encode('german shepard\n'), },
         { name: 'stuff/long.txt', compressionMethod: 8, expected: utf8Encoder.encode(longContent), },
@@ -144,7 +151,7 @@ describe('unzipit', function() {
     });
 
     it('works with Promise.all()', async() => {
-      const {entries} = await loader.loadLargeZip();
+      const {entries} = await loader.load('./data/large.zip');
       await Promise.all(Object.values(entries).map(async(entry) => {
         entry.data = await entry.arrayBuffer();
       }));
@@ -194,7 +201,7 @@ describe('unzipit', function() {
           return;
         }
 
-        const req = await fetch('./data/stuff.zip');
+        const req = await strictFetch('./data/stuff.zip');
         const arrayBuffer = await req.arrayBuffer();
         const sharedArrayBuffer = new SharedArrayBuffer(arrayBuffer.byteLength);
         const view = new Uint8Array(sharedArrayBuffer);
@@ -207,7 +214,7 @@ describe('unzipit', function() {
         // I'm not sure I should check this but given it has repercussions for using
         // arrayBuffers it seems like I should either check it's always true or never true.
 
-        const req = await fetch('./data/stuff.zip');
+        const req = await strictFetch('./data/stuff.zip');
         const arrayBuffer = await req.arrayBuffer();
         const {entries} = await unzip(arrayBuffer);
         assert.notStrictEqual(entries['stuff/dog.txt'].nameBytes.buffer, arrayBuffer);
@@ -264,17 +271,11 @@ describe('unzipit', function() {
   describe('url', async() => {
 
     addTopTests({
-      async loadStuffZip() {
-        return await unzip('./data/stuff.zip');
+      async load(url) {
+        return await unzip(url);
       },
-      async loadStuffZipRaw() {
-        return await unzipRaw('./data/stuff.zip');
-      },
-      async loadTest64Zip() {
-        return await unzip('./data/test64.zip');
-      },
-      async loadLargeZip() {
-        return await unzip('./data/large.zip');
+      async loadRaw(url) {
+        return await unzipRaw(url);
       },
     });
 
@@ -282,24 +283,14 @@ describe('unzipit', function() {
 
   describe('http range requests', async() => {
 
-    async function unzipWithRangeReader(url) {
-      const reader = new HTTPRangeReader(url);
-      return await unzip(reader);
-    }
-
     addTopTests({
-      async loadStuffZip() {
-        return await unzipWithRangeReader('./data/stuff.zip');
+      async load(url) {
+        const reader = new HTTPRangeReader(url);
+        return await unzip(reader);
       },
-      async loadStuffZipRaw() {
-        const reader = new HTTPRangeReader('./data/stuff.zip');
+      async loadRaw(url) {
+        const reader = new HTTPRangeReader(url);
         return await unzipRaw(reader);
-      },
-      async loadTest64Zip() {
-        return await unzipWithRangeReader('./data/test64.zip');
-      },
-      async loadLargeZip() {
-        return await unzipWithRangeReader('./data/large.zip');
       },
     });
 
@@ -307,36 +298,22 @@ describe('unzipit', function() {
 
   describe('ArrayBuffer', () => {
 
-    let stuffZipArrayBuffer;
-    let test64ZipArrayBuffer;
-    let largeZipArrayBuffer;
-
     async function getArrayBuffer(url) {
-      const req = await fetch(url);
+      const req = await strictFetch(url);
       const arrayBuffer = await req.arrayBuffer();
       const sig = await sha256(new Uint8Array(arrayBuffer));
       assert.equal(sig, filesSHA256[url]);
       return arrayBuffer;
     }
 
-    before(async() => {
-      stuffZipArrayBuffer = await getArrayBuffer('./data/stuff.zip');
-      test64ZipArrayBuffer = await getArrayBuffer('./data/test64.zip');
-      largeZipArrayBuffer = await getArrayBuffer('./data/large.zip');
-    });
-
     addTopTests({
-      async loadStuffZip() {
-        return await unzip(stuffZipArrayBuffer);
+      async load(url) {
+        const arrayBuffer = await getArrayBuffer(url);
+        return await unzip(arrayBuffer);
       },
-      async loadStuffZipRaw() {
-        return await unzipRaw(stuffZipArrayBuffer);
-      },
-      async loadTest64Zip() {
-        return await unzip(test64ZipArrayBuffer);
-      },
-      async loadLargeZip() {
-        return await unzip(largeZipArrayBuffer);
+      async loadRaw(url) {
+        const arrayBuffer = await getArrayBuffer(url);
+        return await unzipRaw(arrayBuffer);
       },
     });
 
@@ -344,12 +321,8 @@ describe('unzipit', function() {
 
   describe('Uint8Array', () => {
 
-    let stuffZipUint8Array;
-    let test64ZipUint8Array;
-    let largeZipUint8Array;
-
     async function getUint8Array(url) {
-      const req = await fetch(url);
+      const req = await strictFetch(url);
       const arrayBuffer = await req.arrayBuffer();
       const data = new Uint8Array(arrayBuffer);
       const sig = await sha256(data);
@@ -361,24 +334,14 @@ describe('unzipit', function() {
       return new Uint8Array(buf.buffer, extraStartEnd, data.length);
     }
 
-    before(async() => {
-      stuffZipUint8Array = await getUint8Array('./data/stuff.zip');
-      test64ZipUint8Array = await getUint8Array('./data/test64.zip');
-      largeZipUint8Array = await getUint8Array('./data/large.zip');
-    });
-
     addTopTests({
-      async loadStuffZip() {
-        return await unzip(stuffZipUint8Array);
+      async load(url) {
+        const uint8Array = await getUint8Array(url);
+        return await unzip(uint8Array);
       },
-      async loadStuffZipRaw() {
-        return await unzipRaw(stuffZipUint8Array);
-      },
-      async loadTest64Zip() {
-        return await unzip(test64ZipUint8Array);
-      },
-      async loadLargeZip() {
-        return await unzip(largeZipUint8Array);
+      async loadRaw(url) {
+        const uint8Array = await getUint8Array(url);
+        return await unzipRaw(uint8Array);
       },
     });
 
@@ -386,33 +349,19 @@ describe('unzipit', function() {
 
   describe('Blob', () => {
 
-    let stuffZipBlob;
-    let test64ZipBlob;
-    let largeZipBlob;
-
     async function getBlob(url) {
-      const req = await fetch(url);
+      const req = await strictFetch(url);
       return await req.blob();
     }
 
-    before(async() => {
-      stuffZipBlob = await getBlob('./data/stuff.zip');
-      test64ZipBlob = await getBlob('./data/test64.zip');
-      largeZipBlob = await getBlob('./data/large.zip');
-    });
-
     addTopTests({
-      async loadStuffZip() {
-        return await unzip(stuffZipBlob);
+      async load(url) {
+        const blob = await getBlob(url);
+        return await unzip(blob);
       },
-      async loadStuffZipRaw() {
-        return await unzipRaw(stuffZipBlob);
-      },
-      async loadTest64Zip() {
-        return await unzip(test64ZipBlob);
-      },
-      async loadLargeZip() {
-        return await unzip(largeZipBlob);
+      async loadRaw(url) {
+        const blob = await getBlob(url);
+        return await unzipRaw(blob);
       },
     });
 
@@ -422,12 +371,8 @@ describe('unzipit', function() {
 
     describe('SharedArrayBuffer', () => {
 
-      let stuffZipSharedArrayBuffer;
-      let test64ZipSharedArrayBuffer;
-      let largeZipSharedArrayBuffer;
-
       async function getSharedArrayBuffer(url) {
-        const req = await fetch(url);
+        const req = await strictFetch(url);
         const arrayBuffer = await req.arrayBuffer();
         const sharedArrayBuffer = new SharedArrayBuffer(arrayBuffer.byteLength);
         const view = new Uint8Array(sharedArrayBuffer);
@@ -435,24 +380,14 @@ describe('unzipit', function() {
         return sharedArrayBuffer;
       }
 
-      before(async() => {
-        stuffZipSharedArrayBuffer = await getSharedArrayBuffer('./data/stuff.zip');
-        test64ZipSharedArrayBuffer = await getSharedArrayBuffer('./data/test64.zip');
-        largeZipSharedArrayBuffer = await getSharedArrayBuffer('./data/large.zip');
-      });
-
       addTopTests({
-        async loadStuffZip() {
-          return await unzip(stuffZipSharedArrayBuffer);
+        async load(url) {
+          const sharedArrayBuffer = await getSharedArrayBuffer(url);
+          return await unzip(sharedArrayBuffer);
         },
-        async loadStuffZipRaw() {
-          return await unzipRaw(stuffZipSharedArrayBuffer);
-        },
-        async loadTest64Zip() {
-          return await unzip(test64ZipSharedArrayBuffer);
-        },
-        async loadLargeZip() {
-          return await unzip(largeZipSharedArrayBuffer);
+        async loadRaw(url) {
+          const sharedArrayBuffer = await getSharedArrayBuffer(url);
+          return await unzipRaw(sharedArrayBuffer);
         },
       });
 
