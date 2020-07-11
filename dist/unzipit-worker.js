@@ -1,4 +1,4 @@
-/* unzipit@1.2.0, license MIT */
+/* unzipit@1.3.1, license MIT */
 (function (factory) {
   typeof define === 'function' && define.amd ? define(factory) :
   factory();

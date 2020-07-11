@@ -29,6 +29,7 @@ export type ZipEntry = {
   commentBytes: Uint8Array,         // the raw comment for this entry
   lastModDate: Date,                // a Date
   isDirectory: boolean,             // True if directory
+  encrypted: boolean,               // True if encrypted
 };
 
 export interface Reader {

@@ -1,4 +1,4 @@
-/* unzipit@1.2.0, license MIT */
+/* unzipit@1.3.1, license MIT */
 (function (global, factory) {
   typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
   typeof define === 'function' && define.amd ? define(['exports'], factory) :
@@ -682,27 +682,27 @@
   }
 
   class ZipEntry {
-    constructor(reader, entry) {
+    constructor(reader, rawEntry) {
       this._reader = reader;
-      this._entry = entry;
-      this.name = entry.name;
-      this.nameBytes = entry.nameBytes;
-      this.size = entry.uncompressedSize;
-      this.compressedSize = entry.compressedSize;
-      this.comment = entry.comment;
-      this.commentBytes = entry.commentBytes;
-      this.compressionMethod = entry.compressionMethod;
-      this.lastModDate = dosDateTimeToDate(entry.lastModFileDate, entry.lastModFileTime);
-      this.isDirectory = entry.uncompressedSize === 0 && entry.name.endsWith('/');
-      this.encrypted = !!(entry.generalPurposeBitFlag & 0x1);
+      this._rawEntry = rawEntry;
+      this.name = rawEntry.name;
+      this.nameBytes = rawEntry.nameBytes;
+      this.size = rawEntry.uncompressedSize;
+      this.compressedSize = rawEntry.compressedSize;
+      this.comment = rawEntry.comment;
+      this.commentBytes = rawEntry.commentBytes;
+      this.compressionMethod = rawEntry.compressionMethod;
+      this.lastModDate = dosDateTimeToDate(rawEntry.lastModFileDate, rawEntry.lastModFileTime);
+      this.isDirectory = rawEntry.uncompressedSize === 0 && rawEntry.name.endsWith('/');
+      this.encrypted = !!(rawEntry.generalPurposeBitFlag & 0x1);
     }
     // returns a promise that returns a Blob for this entry
     async blob(type = 'application/octet-stream') {
-      return await readEntryDataAsBlob(this._reader, this._entry, type);
+      return await readEntryDataAsBlob(this._reader, this._rawEntry, type);
     }
     // returns a promise that returns an ArrayBuffer for this entry
     async arrayBuffer() {
-      return await readEntryDataAsArrayBuffer(this._reader, this._entry);
+      return await readEntryDataAsArrayBuffer(this._reader, this._rawEntry);
     }
     // returns text, assumes the text is valid utf8. If you want more options decode arrayBuffer yourself
     async text() {
@@ -888,19 +888,19 @@
 
   const CENTRAL_DIRECTORY_FILE_HEADER_SIGNATURE = 0x02014b50;
 
-  async function readEntries(reader, centralDirectoryOffset, centralDirectorySize, entryCount, comment, commentBytes) {
+  async function readEntries(reader, centralDirectoryOffset, centralDirectorySize, rawEntryCount, comment, commentBytes) {
     let readEntryCursor = 0;
     const allEntriesBuffer = await readAs(reader, centralDirectoryOffset, centralDirectorySize);
-    const entries = [];
+    const rawEntries = [];
 
-    for (let e = 0; e < entryCount; ++e) {
+    for (let e = 0; e < rawEntryCount; ++e) {
       const buffer = allEntriesBuffer.subarray(readEntryCursor, readEntryCursor + 46);
       // 0 - Central directory file header signature
       const signature = getUint32LE(buffer, 0);
       if (signature !== CENTRAL_DIRECTORY_FILE_HEADER_SIGNATURE) {
         throw new Error(`invalid central directory file header signature: 0x${signature.toString(16)}`);
       }
-      const entry = {
+      const rawEntry = {
         // 4 - Version made by
         versionMadeBy: getUint16LE(buffer, 4),
         // 6 - Version needed to extract (minimum)
@@ -934,20 +934,20 @@
         relativeOffsetOfLocalHeader: getUint32LE(buffer, 42),
       };
 
-      if (entry.generalPurposeBitFlag & 0x40) {
+      if (rawEntry.generalPurposeBitFlag & 0x40) {
         throw new Error('strong encryption is not supported');
       }
 
       readEntryCursor += 46;
 
-      const data = allEntriesBuffer.subarray(readEntryCursor, readEntryCursor + entry.fileNameLength + entry.extraFieldLength + entry.fileCommentLength);
-      entry.nameBytes = data.slice(0, entry.fileNameLength);
-      entry.name = decodeBuffer(entry.nameBytes);
+      const data = allEntriesBuffer.subarray(readEntryCursor, readEntryCursor + rawEntry.fileNameLength + rawEntry.extraFieldLength + rawEntry.fileCommentLength);
+      rawEntry.nameBytes = data.slice(0, rawEntry.fileNameLength);
+      rawEntry.name = decodeBuffer(rawEntry.nameBytes);
 
       // 46+n - Extra field
-      const fileCommentStart = entry.fileNameLength + entry.extraFieldLength;
-      const extraFieldBuffer = data.slice(entry.fileNameLength, fileCommentStart);
-      entry.extraFields = [];
+      const fileCommentStart = rawEntry.fileNameLength + rawEntry.extraFieldLength;
+      const extraFieldBuffer = data.slice(rawEntry.fileNameLength, fileCommentStart);
+      rawEntry.extraFields = [];
       let i = 0;
       while (i < extraFieldBuffer.length - 3) {
         const headerId = getUint16LE(extraFieldBuffer, i + 0);
@@ -957,7 +957,7 @@
         if (dataEnd > extraFieldBuffer.length) {
           throw new Error('extra field length exceeds extra field buffer size');
         }
-        entry.extraFields.push({
+        rawEntry.extraFields.push({
           id: headerId,
           data: extraFieldBuffer.slice(dataStart, dataEnd),
         });
@@ -965,44 +965,44 @@
       }
 
       // 46+n+m - File comment
-      entry.commentBytes = data.slice(fileCommentStart, fileCommentStart + entry.fileCommentLength);
-      entry.comment = decodeBuffer(entry.commentBytes);
+      rawEntry.commentBytes = data.slice(fileCommentStart, fileCommentStart + rawEntry.fileCommentLength);
+      rawEntry.comment = decodeBuffer(rawEntry.commentBytes);
 
       readEntryCursor += data.length;
 
-      if (entry.uncompressedSize            === 0xffffffff ||
-          entry.compressedSize              === 0xffffffff ||
-          entry.relativeOffsetOfLocalHeader === 0xffffffff) {
+      if (rawEntry.uncompressedSize            === 0xffffffff ||
+          rawEntry.compressedSize              === 0xffffffff ||
+          rawEntry.relativeOffsetOfLocalHeader === 0xffffffff) {
         // ZIP64 format
         // find the Zip64 Extended Information Extra Field
-        const zip64ExtraField = entry.extraFields.find(e => e.id === 0x0001);
+        const zip64ExtraField = rawEntry.extraFields.find(e => e.id === 0x0001);
         if (!zip64ExtraField) {
           return new Error('expected zip64 extended information extra field');
         }
         const zip64EiefBuffer = zip64ExtraField.data;
         let index = 0;
         // 0 - Original Size          8 bytes
-        if (entry.uncompressedSize === 0xffffffff) {
+        if (rawEntry.uncompressedSize === 0xffffffff) {
           if (index + 8 > zip64EiefBuffer.length) {
             throw new Error('zip64 extended information extra field does not include uncompressed size');
           }
-          entry.uncompressedSize = getUint64LE(zip64EiefBuffer, index);
+          rawEntry.uncompressedSize = getUint64LE(zip64EiefBuffer, index);
           index += 8;
         }
         // 8 - Compressed Size        8 bytes
-        if (entry.compressedSize === 0xffffffff) {
+        if (rawEntry.compressedSize === 0xffffffff) {
           if (index + 8 > zip64EiefBuffer.length) {
             throw new Error('zip64 extended information extra field does not include compressed size');
           }
-          entry.compressedSize = getUint64LE(zip64EiefBuffer, index);
+          rawEntry.compressedSize = getUint64LE(zip64EiefBuffer, index);
           index += 8;
         }
         // 16 - Relative Header Offset 8 bytes
-        if (entry.relativeOffsetOfLocalHeader === 0xffffffff) {
+        if (rawEntry.relativeOffsetOfLocalHeader === 0xffffffff) {
           if (index + 8 > zip64EiefBuffer.length) {
             throw new Error('zip64 extended information extra field does not include relative header offset');
           }
-          entry.relativeOffsetOfLocalHeader = getUint64LE(zip64EiefBuffer, index);
+          rawEntry.relativeOffsetOfLocalHeader = getUint64LE(zip64EiefBuffer, index);
           index += 8;
         }
         // 24 - Disk Start Number      4 bytes
@@ -1010,31 +1010,30 @@
 
       // check for Info-ZIP Unicode Path Extra Field (0x7075)
       // see https://github.com/thejoshwolfe/yauzl/issues/33
-      const nameField = entry.extraFields.find(e =>
+      const nameField = rawEntry.extraFields.find(e =>
           e.id === 0x7075 &&
           e.data.length >= 6 && // too short to be meaningful
           e.data[0] === 1 &&    // Version       1 byte      version of this extra field, currently 1
-          getUint32LE(e.data, 1), crc$1.unsigned(entry.nameBytes)); // NameCRC32     4 bytes     File Name Field CRC32 Checksum
-                                                              // > If the CRC check fails, this UTF-8 Path Extra Field should be
-                                                              // > ignored and the File Name field in the header should be used instead.
+          getUint32LE(e.data, 1), crc$1.unsigned(rawEntry.nameBytes)); // NameCRC32     4 bytes     File Name Field CRC32 Checksum
+                                                                     // > If the CRC check fails, this UTF-8 Path Extra Field should be
+                                                                     // > ignored and the File Name field in the header should be used instead.
       if (nameField) {
-          // UnicodeName   Variable    UTF-8 version of the entry File Name
-          entry.fileName = decodeBuffer(nameField.data.slice(5));
+          // UnicodeName Variable UTF-8 version of the entry File Name
+          rawEntry.fileName = decodeBuffer(nameField.data.slice(5));
       }
 
       // validate file size
-      if (entry.compressionMethod === 0) {
-        let expectedCompressedSize = entry.uncompressedSize;
-        if ((entry.generalPurposeBitFlag & 0x1) !== 0) {
+      if (rawEntry.compressionMethod === 0) {
+        let expectedCompressedSize = rawEntry.uncompressedSize;
+        if ((rawEntry.generalPurposeBitFlag & 0x1) !== 0) {
           // traditional encryption prefixes the file data with a header
           expectedCompressedSize += 12;
         }
-        if (entry.compressedSize !== expectedCompressedSize) {
-          throw new Error(`compressed/uncompressed size mismatch for stored file: ${entry.compressedSize} != ${entry.uncompressedSize}`);
+        if (rawEntry.compressedSize !== expectedCompressedSize) {
+          throw new Error(`compressed size mismatch for stored file: ${rawEntry.compressedSize} != ${expectedCompressedSize}`);
         }
       }
-
-      entries.push(entry);
+      rawEntries.push(rawEntry);
     }
     const zip = {
       comment,
@@ -1042,15 +1041,15 @@
     };
     return {
       zip,
-      entries: entries.map(e => new ZipEntry(reader, e)),
+      entries: rawEntries.map(e => new ZipEntry(reader, e)),
     };
   }
 
-  async function readEntryDataHeader(reader, entry) {
-    if (entry.generalPurposeBitFlag & 0x1) {
+  async function readEntryDataHeader(reader, rawEntry) {
+    if (rawEntry.generalPurposeBitFlag & 0x1) {
       throw new Error('encrypted entries not supported');
     }
-    const buffer = await readAs(reader, entry.relativeOffsetOfLocalHeader, 30);
+    const buffer = await readAs(reader, rawEntry.relativeOffsetOfLocalHeader, 30);
     // note: maybe this should be passed in or cached on entry
     // as it's async so there will be at least one tick (not sure about that)
     const totalLength = await reader.getLength();
@@ -1076,25 +1075,25 @@
     const extraFieldLength = getUint16LE(buffer, 28);
     // 30 - File name
     // 30+n - Extra field
-    const localFileHeaderEnd = entry.relativeOffsetOfLocalHeader + buffer.length + fileNameLength + extraFieldLength;
+    const localFileHeaderEnd = rawEntry.relativeOffsetOfLocalHeader + buffer.length + fileNameLength + extraFieldLength;
     let decompress;
-    if (entry.compressionMethod === 0) {
+    if (rawEntry.compressionMethod === 0) {
       // 0 - The file is stored (no compression)
       decompress = false;
-    } else if (entry.compressionMethod === 8) {
+    } else if (rawEntry.compressionMethod === 8) {
       // 8 - The file is Deflated
       decompress = true;
     } else {
-      throw new Error(`unsupported compression method: ${entry.compressionMethod}`);
+      throw new Error(`unsupported compression method: ${rawEntry.compressionMethod}`);
     }
     const fileDataStart = localFileHeaderEnd;
-    const fileDataEnd = fileDataStart + entry.compressedSize;
-    if (entry.compressedSize !== 0) {
+    const fileDataEnd = fileDataStart + rawEntry.compressedSize;
+    if (rawEntry.compressedSize !== 0) {
       // bounds check now, because the read streams will probably not complain loud enough.
       // since we're dealing with an unsigned offset plus an unsigned size,
       // we only have 1 thing to check for.
       if (fileDataEnd > totalLength) {
-        throw new Error(`file data overflows file bounds: ${fileDataStart} +  ${entry.compressedSize}  > ${totalLength}`);
+        throw new Error(`file data overflows file bounds: ${fileDataStart} +  ${rawEntry.compressedSize}  > ${totalLength}`);
       }
     }
     return {
@@ -1103,10 +1102,10 @@
     };
   }
 
-  async function readEntryDataAsArrayBuffer(reader, entry) {
-    const {decompress, fileDataStart} = await readEntryDataHeader(reader, entry);
+  async function readEntryDataAsArrayBuffer(reader, rawEntry) {
+    const {decompress, fileDataStart} = await readEntryDataHeader(reader, rawEntry);
     if (!decompress) {
-      const dataView = await readAs(reader, fileDataStart, entry.compressedSize);
+      const dataView = await readAs(reader, fileDataStart, rawEntry.compressedSize);
       // make copy?
       //
       // 1. The source is a Blob/file. In this case we'll get back TypedArray we can just hand to the user
@@ -1120,15 +1119,15 @@
       return isTypedArraySameAsArrayBuffer(dataView) ? dataView.buffer : dataView.slice().buffer;
     }
     // see comment in readEntryDateAsBlob
-    const typedArrayOrBlob = await readAsBlobOrTypedArray(reader, fileDataStart, entry.compressedSize);
-    const result = await inflateRawAsync(typedArrayOrBlob, entry.uncompressedSize);
+    const typedArrayOrBlob = await readAsBlobOrTypedArray(reader, fileDataStart, rawEntry.compressedSize);
+    const result = await inflateRawAsync(typedArrayOrBlob, rawEntry.uncompressedSize);
     return result;
   }
 
-  async function readEntryDataAsBlob(reader, entry, type) {
-    const {decompress, fileDataStart} = await readEntryDataHeader(reader, entry);
+  async function readEntryDataAsBlob(reader, rawEntry, type) {
+    const {decompress, fileDataStart} = await readEntryDataHeader(reader, rawEntry);
     if (!decompress) {
-      const typedArrayOrBlob = await readAsBlobOrTypedArray(reader, fileDataStart, entry.compressedSize, type);
+      const typedArrayOrBlob = await readAsBlobOrTypedArray(reader, fileDataStart, rawEntry.compressedSize, type);
       if (isBlob(typedArrayOrBlob)) {
         return typedArrayOrBlob;
       }
@@ -1137,8 +1136,8 @@
     // Here's the issue with this mess (should refactor?)
     // if the source is a blob then we really want to pass a blob to inflateRawAsync to avoid a large
     // copy if we're going to a worker.
-    const typedArrayOrBlob = await readAsBlobOrTypedArray(reader, fileDataStart, entry.compressedSize);
-    const result = await inflateRawAsync(typedArrayOrBlob, entry.uncompressedSize, type);
+    const typedArrayOrBlob = await readAsBlobOrTypedArray(reader, fileDataStart, rawEntry.compressedSize);
+    const result = await inflateRawAsync(typedArrayOrBlob, rawEntry.uncompressedSize, type);
     return result;
   }
 
