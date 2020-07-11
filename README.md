@@ -206,7 +206,7 @@ I don't need a library to try to do 50 things via options and configuration. Rat
 a library to handle the main task and make it possible to do the rest outside the library.
 This makes a library far more flexible.
 
-As an example some libraries provide no raw data for filenames. Apparently som zip files
+As an example some libraries provide no raw data for filenames. Apparently some zip files
 have non-utf8 filenames in them. The solution for this library is to do that on your own.
 
 Example
@@ -482,7 +482,8 @@ Follow the instructions on testing but add  `?timeout=0` to the URL as in `http:
 
 # Acknowledgements
 
-The code is **heavily** based on [yauzl](https://github.com/thejoshwolfe/yauzl)
+* The code is **heavily** based on [yauzl](https://github.com/thejoshwolfe/yauzl)
+* The code uses the es6 module version of [uzip.js](https://www.npmjs.com/package/uzip-module)
 
 # Licence
 
