@@ -5,6 +5,9 @@
   "main": "dist/unzipit.js",
   "module": "dist/unzipit.module.js",
   "types": "dist/unzipit.d.ts",
+  "engines": {
+    "node": ">=12"
+  },
   "scripts": {
     "build": "npm run build-min && npm run build-ts",
     "build-normal": "rollup -c",
