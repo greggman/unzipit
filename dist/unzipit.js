@@ -1,8 +1,8 @@
-/* unzipit@1.3.2, license MIT */
+/* unzipit@1.3.3, license MIT */
 (function (global, factory) {
   typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
   typeof define === 'function' && define.amd ? define(['exports'], factory) :
-  (global = global || self, factory(global.unzipit = {}));
+  (global = typeof globalThis !== 'undefined' ? globalThis : global || self, factory(global.unzipit = {}));
 }(this, (function (exports) { 'use strict';
 
   /* global SharedArrayBuffer, process */
