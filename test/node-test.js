@@ -1,10 +1,52 @@
 
 /* eslint-env node, mocha */
+
+const util = require('util');
+global.TextDecoder = global.TextDecoder || util.TextDecoder;  // made global in node 12?
 const assert = require('chai').assert;
 const {unzip, setOptions, cleanup} = require('../dist/unzipit.js');
-const fsPromises = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
+
+// for node < 10?
+const fs = require('fs');
+const fsPromises = fs.promises || makeFsAPI();
+
+function makeFsAPI() {
+  const read = util.promisify(fs.read);
+  const open = util.promisify(fs.open);
+  const close = util.promisify(fs.close);
+  const stat = util.promisify(fs.stat);
+  const readFile = util.promisify(fs.readFile);
+  return {
+    open(filename) {
+      return open(filename, 'r')
+         .then((fh) => {
+          return {
+            read(...args) {
+              return read(fh, ...args);
+            },
+            close(...args) {
+              return close(fh, ...args);
+            },
+            stat(...args) {
+              return stat(filename, ...args);
+            },
+          };
+         });
+    },
+    readFile,
+    stat,
+  };
+}
+
+// for node < 12?
+Object.prototype.fromEntries = Object.prototype.fromEntries || function(entries) {  // eslint-disable-line no-extend-native
+  return entries.reduce((obj, [key, value]) => {
+    obj[key] = value;
+    return obj;
+  }, {});
+};
 
 async function sha256(uint8view) {
   return crypto.createHash('sha256').update(uint8view).digest('hex');
@@ -43,7 +85,7 @@ class StatelessFileReader {
     return this.length;
   }
   async read(offset, length) {
-    const fh = await fsPromises.open(this.filename);
+    const fh = await fsPromises.open(this.filename, 'r');
     const data = new Uint8Array(length);
     await fh.read(data, 0, length, offset);
     await fh.close();
@@ -54,7 +96,7 @@ class StatelessFileReader {
 // It's up to you to call `close`
 class FileReader {
   constructor(filename) {
-    this.fhp = fsPromises.open(filename);
+    this.fhp = fsPromises.open(filename, 'r');
   }
   async close() {
     const fh = await this.fhp;
@@ -140,7 +182,7 @@ describe('unzipit', function() {
 
   });
 
-  describe('without workers', () => {
+  describe('with workers', () => {
 
     before(() => {
       setOptions({workerURL: path.join(__dirname, '..', 'dist', 'unzipit-worker.js')});

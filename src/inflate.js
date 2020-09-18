@@ -64,7 +64,15 @@ function dynamicRequire(mod, request) {
   return mod.require(request);
 }
 
-const workerHelper = (function() {
+const getWorkerHelper = (function() {
+  let workerHelper;
+  return function getWorkerHelper()  {
+    workerHelper = workerHelper || makeWorkerHelper();
+    return workerHelper;
+  };
+}());
+
+function makeWorkerHelper() {
   if (isNode) {
     // We need to use `dynamicRequire` because `require` on it's own will be optimized by webpack.
     const {Worker} = dynamicRequire(module, 'worker_threads');
@@ -133,7 +141,7 @@ const workerHelper = (function() {
       },
     };
   }
-}());
+}
 
 function makeWorkerAvailable(worker) {
   availableWorkers.push(worker);
@@ -144,10 +152,10 @@ async function getAvailableWorker() {
   if (availableWorkers.length === 0 && numWorkers < config.numWorkers) {
     ++numWorkers;  // see comment at numWorkers declaration
     try {
-      const worker = await workerHelper.createWorker(config.workerURL);
+      const worker = await getWorkerHelper().createWorker(config.workerURL);
       workers.push(worker);
       availableWorkers.push(worker);
-      workerHelper.addEventListener(worker, handleResult);
+      getWorkerHelper().addEventListener(worker, handleResult);
     } catch (e) {
       // set this global out-of-band (needs refactor)
       canUseWorkers = false;
@@ -280,7 +288,7 @@ function clearArray(arr) {
 
 export async function cleanup() {
   for (const worker of workers) {
-    await workerHelper.terminate(worker);
+    await getWorkerHelper().terminate(worker);
   }
   clearArray(workers);
   clearArray(availableWorkers);
