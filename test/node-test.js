@@ -140,7 +140,7 @@ describe('unzipit', function() {
 
   });
 
-  describe('without workers', () => {
+  describe('with workers', () => {
 
     before(() => {
       setOptions({workerURL: path.join(__dirname, '..', 'dist', 'unzipit-worker.js')});
