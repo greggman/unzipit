@@ -1,4 +1,4 @@
-/* unzipit@1.3.1, license MIT */
+/* unzipit@1.3.2, license MIT */
 function inflate(data, buf) {
 	var u8=Uint8Array;
 	if(data[0]==3 && data[1]==0) return (buf ? buf : new u8(0));
