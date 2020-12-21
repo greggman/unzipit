@@ -719,6 +719,7 @@
   const EOCDR_WITHOUT_COMMENT_SIZE = 22;
   const MAX_COMMENT_SIZE = 0xffff; // 2-byte size
   const EOCDR_SIGNATURE = 0x06054b50;
+  const ZIP64_EOCDR_SIGNATURE = 0x06064b50;
 
   async function readAs(reader, offset, length) {
     return await reader.read(offset, length);
@@ -864,10 +865,10 @@
     // 16 - total number of disks
 
     // ZIP64 end of central directory record
-    const zip64Eocdr = readAs(reader, zip64EocdrOffset, 56);
+    const zip64Eocdr = await readAs(reader, zip64EocdrOffset, 56);
 
     // 0 - zip64 end of central dir signature                           4 bytes  (0x06064b50)
-    if (getUint32LE(zip64Eocdr, 0) !== EOCDR_SIGNATURE) {
+    if (getUint32LE(zip64Eocdr, 0) !== ZIP64_EOCDR_SIGNATURE) {
       throw new Error('invalid zip64 end of central directory record signature');
     }
     // 4 - size of zip64 end of central directory record                8 bytes
