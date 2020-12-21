@@ -35,7 +35,7 @@ async function sha256(uint8View) {
 
 const filesSHA256 = {
   './data/large.zip': 'c93b2587bf27b998887c9a281a6711ff4144047dcb6f10b1459bed9cfdaef377',
-  './data/test64.zip': 'b2a15c3f415ba4f6386b840c6d82e5b70d32b554cb2dd070f588b52aac968ec9',
+  './data/test64.zip': 'b4498edc5490a2dee0077ec240f1f6191d1228bea53bdd20481e143c0848a6e3',
   './data/stuff.zip': '5874f0e9c553daec6a1f2e49992d474353c52a73584317a7122de59e35554608',
   './data/zip-with-zipcrypto-password-test.zip': '64d358059acc469de98a55afa5dda26dd127b1f57b2f0379f4e22f590df1176c',
   './data/zip-with-aes-256-password-test.zip': 'c560801a8043c09320ed1a427a03f83931a51b68f6c3e061c5ee6896f1d49861',
@@ -123,13 +123,27 @@ describe('unzipit', function() {
 
     it('works with zip64', async() => {
       const {entries} = await loader.load('./data/test64.zip');
-      const expected = {
-        'test64/': { isDir: true, },
-        'test64/banana.txt': { content: '2 bananas\n', },
-        'test64/オエムジ.txt': { content: 'マジ！', },
-        'test64/pineapple.txt': { content: 'I have a pen. I have an apple.\n', },
-      };
-      await checkZipEntriesMatchExpected(entries, expected);
+      assert.equal(70002, Object.keys(entries).length);
+
+      // Few random entries
+      assert.exists(entries['test/xaaaaaaaggc']);
+      assert.exists(entries['test/xaaaaaablup']);
+      assert.exists(entries['test/xaaaaaaaxjl']);
+      assert.exists(entries['test/xaaaaaaaxlu']);
+      assert.exists(entries['test/xaaaaaadbfx']);
+      assert.exists(entries['test/xaaaaaacrsd']);
+      assert.exists(entries['test/xaaaaaaaobv']);
+      assert.exists(entries['test/xaaaaaabdpe']);
+      assert.exists(entries['test/xaaaaaaaodo']);
+      assert.exists(entries['test/xaaaaaadunb']);
+      assert.exists(entries['test/xaaaaaadxtt']);
+      assert.exists(entries['test/xaaaaaabilj']);
+      assert.exists(entries['test/xaaaaaadxrm']);
+      assert.exists(entries['test/xaaaaaabijs']);
+      assert.exists(entries['test/xaaaaaaauvc']);
+      assert.exists(entries['test/xaaaaaadozw']);
+      assert.exists(entries['test/xaaaaaaaupz']);
+      assert.exists(entries['test/xaaaaaachgq']);
     });
 
     it('works with large zip (not that large)', async() => {
