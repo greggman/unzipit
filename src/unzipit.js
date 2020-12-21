@@ -219,7 +219,7 @@ async function readZip64CentralDirectory(reader, offset, comment, commentBytes) 
   // 16 - total number of disks
 
   // ZIP64 end of central directory record
-  const zip64Eocdr = readAs(reader, zip64EocdrOffset, 56);
+  const zip64Eocdr = await readAs(reader, zip64EocdrOffset, 56);
 
   // 0 - zip64 end of central dir signature                           4 bytes  (0x06064b50)
   if (getUint32LE(zip64Eocdr, 0) !== ZIP64_EOCDR_SIGNATURE) {
