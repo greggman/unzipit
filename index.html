@@ -315,6 +315,8 @@ Advantages over other libraries.
 * UZIP requires the entire compressed file to be in memory and
   the entire uncompressed contents of all the files to be in memory.
 
+* fflate requires all uncompressed files in memory at once
+
 * Yauzl does not require all the files to be in memory but
   they do have to be read in order and it has very peculiar API where
   you still have to manually go through all the entries even if
