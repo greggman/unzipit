@@ -250,17 +250,26 @@ Advantages over other libraries.
 * UZIP requires the entire compressed file to be in memory and
   the entire uncompressed contents of all the files to be in memory.
 
-* fflate requires all uncompressed files in memory at once.
-  It also must read the entire zip file though it does not
-  require to be all in memory at once.
-
 * Yauzl does not require all the files to be in memory but
   they do have to be read in order and it has very peculiar API where
   you still have to manually go through all the entries even if
   you don't choose to read their contents. Further it's node only.
 
-Unzipit does not require all content to be in memory. If you use a Blob
-the browser can effectively virtualize access so it doesn't have to be in memory. Only the entries you access use memory. 
+* fflate has 2 modes. One the entire contents of all
+  uncompressed files are provided therefore using lots
+  of memory. The other is like Yauzl where you're required
+  to handle every file but you can choose to ignore
+  certain ones. Further in this mode (maybe both modes) are 
+  not standards compliant. It scans for files but that is not
+  a valid way to read a zip file. The only valid way to read a zip file
+  is to jump to the end of the file and find the table of
+  contents. So, fflate will fail on perfectly valid zip files.
+
+Unzipit does not require all compressed content nor all uncompressed
+content to be in memory. Only the entries you access use memory. 
+If you use a Blob as input the browser can effectively virtualize
+access so it doesn't have to be in memory and unzipit will only
+access the parts of the blob needed to read the content you request.
 
 Further, if you use the `HTTPRangeReader` or similar, unzipit only
 downloads/reads the parts of the zip file you actually use, saving you
