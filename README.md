@@ -25,7 +25,7 @@ async function readFiles(url) {
   const {entries} = await unzip(url);
 
   // print all entries and their sizes
-  for (const [name, entry] in Object.entries(entries)) {
+  for (const [name, entry] of Object.entries(entries)) {
     console.log(name, entry.size);
   }
 
