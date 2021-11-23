@@ -5,7 +5,7 @@ export type ZipInfo = {
 
 export type ZipInfoRaw = {
   zip: Zip,
-  entries: [ZipEntry],
+  entries: ZipEntry[],
 };
 
 export type Zip = {
