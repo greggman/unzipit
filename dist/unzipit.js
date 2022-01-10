@@ -1,4 +1,4 @@
-/* unzipit@1.3.6, license MIT */
+/* unzipit@1.4.0, license MIT */
 (function (global, factory) {
   typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
   typeof define === 'function' && define.amd ? define(['exports'], factory) :
@@ -695,6 +695,8 @@
       this.lastModDate = dosDateTimeToDate(rawEntry.lastModFileDate, rawEntry.lastModFileTime);
       this.isDirectory = rawEntry.uncompressedSize === 0 && rawEntry.name.endsWith('/');
       this.encrypted = !!(rawEntry.generalPurposeBitFlag & 0x1);
+      this.externalFileAttributes = rawEntry.externalFileAttributes;
+      this.versionMadeBy = rawEntry.versionMadeBy;
     }
     // returns a promise that returns a Blob for this entry
     async blob(type = 'application/octet-stream') {
@@ -978,7 +980,7 @@
         // find the Zip64 Extended Information Extra Field
         const zip64ExtraField = rawEntry.extraFields.find(e => e.id === 0x0001);
         if (!zip64ExtraField) {
-          return new Error('expected zip64 extended information extra field');
+          throw new Error('expected zip64 extended information extra field');
         }
         const zip64EiefBuffer = zip64ExtraField.data;
         let index = 0;

@@ -30,6 +30,8 @@ export type ZipEntry = {
   lastModDate: Date,                // a Date
   isDirectory: boolean,             // True if directory
   encrypted: boolean,               // True if encrypted
+  externalFileAttributes: number,   // platform specific file attributes
+  versionMadeBy: number,            // platform that made this file
 };
 
 export interface Reader {
