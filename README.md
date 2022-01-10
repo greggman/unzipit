@@ -361,6 +361,8 @@ class ZipEntry {
   lastModDate: Date,                // a Date
   isDirectory: bool,                // True if directory
   encrypted: bool,                  // True if encrypted
+  externalFileAttributes: number,   // platform specific file attributes
+  versionMadeBy: number,            // platform that made this file
 }
 ```
 
