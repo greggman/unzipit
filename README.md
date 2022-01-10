@@ -477,6 +477,40 @@ size before asking for their content.
 unzipit does not currently support encrypted zip files and will throw if you try to get the data for one.
 Put it on the TODO list 😅
 
+## File Attributes
+
+If you want to make an unzip utilitiy using this library you'll need to be able to mark some files as executable.
+That is unforutunately platform specific. For example, Windows has no concept of "mark a file as executable".
+Each zip entry provides a `versionMadeBy` and `externalFileAttributes` property. You could theoretically use
+that to set file attributes. For example
+
+```js
+fs.writeFileSync(filename, data);
+if (process.platform === 'darwin' || process.platform === 'linux') {
+  const platform = entry.versionMadeBy >> 8;
+  const unix = 3;
+  const darwin = 13
+  if (entry.versionMadeBy === unix || entry.versionMadeBy === darwin) {
+    // no idea what's best here
+    //                                                 +- owner read
+    //                                                 |+- owner write
+    //                                                 ||+- owner execute
+    //                                                 |||+- group read
+    //                                                 ||||+- group write
+    //                                                 |||||+- group execute
+    //                                                 ||||||+- other read
+    //                                                 |||||||+- other write
+    //                                                 ||||||||+- other execute
+    //                                                 |||||||||
+    //                                                 VVVVVVVVV
+    let mod = (entry.externalFileAttributes >> 16) & 0b111111111;  // all the bits
+    mod &= 0b111100100;   // remove write and executable from group and other?
+    mod |= 0b110100100;   // add in owner R/W, group R, other R
+    fs.chmodSync(filename, mod);
+  }
+}
+```
+
 ## Other Limitations
 
 unzipit only supports the uncompressed and deflate compression algorithms. Other algorithms are defined
