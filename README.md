@@ -475,6 +475,11 @@ size before asking for their content.
 unzipit does not currently support encrypted zip files and will throw if you try to get the data for one.
 Put it on the TODO list 😅
 
+## Other Limitations
+
+unzipit only supports the uncompressed and deflate compression algorithms. Other algorithms are defined
+in the zip spec but are uncommon.
+
 # Testing
 
 When writing tests serve the folder with your favorite web server (recommend [`servez`](https://www.npmjs.com/package/servez))
