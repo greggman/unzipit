@@ -63,13 +63,37 @@ async function readFiles(url) {
 }
 ```
 
-
 You can also pass a [`Blob`](https://developer.mozilla.org/en-US/docs/Web/API/Blob),
 [`ArrayBuffer`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/ArrayBuffer),
 [`SharedArrayBuffer`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/SharedArrayBuffer),
 [`TypedArray`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/TypedArray),
 or your own `Reader`
 
+For using without a builder/bundler grab `unzipit.min.js` or `unzipit.module.js` from
+the [`dist`](https://github.com/greggman/unzipit/tree/master/dist) folder and
+include with
+
+```js
+import * as unzipit from `./unzipit.module.js`;
+```
+
+or
+
+```html
+<script src="unzipit.min.js"></script>
+```
+
+or vs CDN
+
+```js
+import * as unzipit from 'https://unpkg.com/unzipit@1.4.0/dist/unzipit.module.js';
+```
+
+or
+
+```html
+<script src="https://unpkg.com/unzipit@1.4.0/dist/unzipit.js"></script>
+```
 ## Node
 
 For node you need to make your own `Reader` or pass in an
