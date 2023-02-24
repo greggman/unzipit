@@ -1,4 +1,4 @@
-/* unzipit@1.4.0, license MIT */
+/* unzipit@1.4.1, license MIT */
 (function (global, factory) {
   typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
   typeof define === 'function' && define.amd ? define(['exports'], factory) :
@@ -430,7 +430,7 @@
   }
 
   function dynamicRequire(mod, request) {
-    return mod.require(request);
+    return mod.require ? mod.require(request) : undefined;
   }
 
   const workerHelper = (function() {
