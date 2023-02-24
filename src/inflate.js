@@ -61,7 +61,7 @@ function startWorker(url) {
 }
 
 function dynamicRequire(mod, request) {
-  return mod.require(request);
+  return mod.require ? mod.require(request) : undefined;
 }
 
 const workerHelper = (function() {
