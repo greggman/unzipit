@@ -476,6 +476,21 @@ The zip standard predates unicode so it's possible and apparently not uncommon f
 to have non-unicode names. `entry.nameBytes` contains the raw bytes of the filename.
 so you are free to decode the name using your own methods. See example above.
 
+## Filename issues in general.
+
+unzipit doesn't and can't know if a filename is valid for your use case. A zip file
+can have any name with any characters in the filename data. All unzipit can do is give you
+the filename as a string from the zip file. It's up to you do deal with it, for example
+to strip out or replace characters in the filename that are incompatible with your OS.
+For example [this zip file](https://github.com/greggman/unzipit/files/10998616/problem-filenames.zip)
+has these filenames:  `'this#file\\name%is&iffy'`, `'???And This one???'`, `'fo:oo'` which
+I believe are problematic on Windows. A user found a file with double slashes as in `foo//bar`
+so you'll need to decide what to do with that.
+
+There is also the issue a user could make a malicious filename. For example "../../.bash_profile"
+on the hope that some program doesn't check the names and just uses the paths as is.
+If you're going to use unzipit to create files you should check and sanitize your paths.
+
 ## ArrayBuffer and SharedArrayBuffer caveats
 
 If you pass in an `ArrayBuffer` or `SharedArrayBuffer` you need to keep the data unchanged
