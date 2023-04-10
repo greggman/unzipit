@@ -15,6 +15,7 @@ Random access unzip library for browser and node based JavaScript
 # How to use
 
 Live Example: [https://jsfiddle.net/greggman/awez4sd7/](https://jsfiddle.net/greggman/awez4sd7/)
+Live Parallel Example: [https://jsfiddle.net/greggman/cgdjm07f/](https://jsfiddle.net/greggman/cgdjm07f/)
 
 ## without workers
 
@@ -62,6 +63,23 @@ async function readFiles(url) {
   ...
 }
 ```
+
+## In Parallel
+
+```js
+import {unzip, setOptions} from 'unzipit';
+
+setOptions({workerURL: 'path/to/unzipit-worker.module.js'});
+
+async function readFiles(url) {
+  const {entries} = await unzipit.unzip(url);
+  const names = Object.keys(entries);
+  const blobs = await Promise.all(Object.values(entries).map(e => e.blob()));
+
+  // names and blobs are now parallel arrays so do whatever you want.
+  const blobsByName = Object.fromEntries(names.map((name, i) => [name, blobs[i]]));
+}
+
 
 You can also pass a [`Blob`](https://developer.mozilla.org/en-US/docs/Web/API/Blob),
 [`ArrayBuffer`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/ArrayBuffer),
