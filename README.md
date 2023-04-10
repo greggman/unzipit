@@ -79,7 +79,7 @@ async function readFiles(url) {
   // names and blobs are now parallel arrays so do whatever you want.
   const blobsByName = Object.fromEntries(names.map((name, i) => [name, blobs[i]]));
 }
-
+```
 
 You can also pass a [`Blob`](https://developer.mozilla.org/en-US/docs/Web/API/Blob),
 [`ArrayBuffer`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/ArrayBuffer),
