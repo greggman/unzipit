@@ -14,8 +14,9 @@ Random access unzip library for browser and node based JavaScript
 
 # How to use
 
-Live Example: [https://jsfiddle.net/greggman/awez4sd7/](https://jsfiddle.net/greggman/awez4sd7/)
-Live Parallel Example: [https://jsfiddle.net/greggman/cgdjm07f/](https://jsfiddle.net/greggman/cgdjm07f/)
+* Live Example: [https://jsfiddle.net/greggman/awez4sd7/](https://jsfiddle.net/greggman/awez4sd7/)
+* Live Parallel Example: [https://jsfiddle.net/greggman/cgdjm07f/](https://jsfiddle.net/greggman/cgdjm07f/)
+* Live User File Example: [https://jsfiddle.net/greggman/s2qe7m6b/](https://jsfiddle.net/greggman/s2qe7m6b/)
 
 ## without workers
 
