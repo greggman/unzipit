@@ -4,7 +4,7 @@
 
 Random access unzip library for browser and node based JavaScript
 
-[![Build Status](https://travis-ci.org/greggman/unzipit.svg?branch=master)](https://travis-ci.org/greggman/unzipit)
+![Build Status](https://github.com/greggman/unzipit/actions/workflows/test.yml/badge.svg)
 [[Live Tests](https://greggman.github.io/unzipit/test/)]
 
 * Less than 8k gzipped without workers, Less than 13k with.
