@@ -1,6 +1,5 @@
-/* global module */
+/* global module, DecompressionStream */
 
-import {inflateRaw} from 'uzip-module';
 import {isNode, isBlob, readBlobAsUint8Array} from './utils';
 
 const config = {
@@ -156,16 +155,42 @@ async function getAvailableWorker() {
   return availableWorkers.pop();
 }
 
+async function decompressRaw(src) {
+  const ds = new DecompressionStream('deflate-raw');
+  const writer = ds.writable.getWriter();
+  const data = src instanceof Uint8Array ? src : new Uint8Array(src);
+  // Do not await the write — doing so before reading causes a deadlock when
+  // the internal buffer fills due to backpressure.
+  writer.write(data).then(() => writer.close()).catch(() => {});
+  const chunks = [];
+  const reader = ds.readable.getReader();
+  for (;;) {
+    const {done, value} = await reader.read();
+    if (done) {
+      break;
+    }
+    chunks.push(value);
+  }
+  const size = chunks.reduce((s, c) => s + c.byteLength, 0);
+  const result = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return result;
+}
+
 // @param {Uint8Array} src
-// @param {number} uncompressedSize
 // @param {string} [type] mime-type
 // @returns {ArrayBuffer|Blob} ArrayBuffer if type is falsy or Blob otherwise.
-function inflateRawLocal(src, uncompressedSize, type, resolve) {
-  const dst = new Uint8Array(uncompressedSize);
-  inflateRaw(src, dst);
-  resolve(type
-     ? new Blob([dst], {type})
-     : dst.buffer);
+async function inflateRawLocal(src, type, resolve, reject) {
+  try {
+    const dst = await decompressRaw(src);
+    resolve(type ? new Blob([dst], {type}) : dst.buffer);
+  } catch (e) {
+    reject(e);
+  }
 }
 
 async function processWaitingForWorkerQueue() {
@@ -219,12 +244,12 @@ async function processWaitingForWorkerQueue() {
   // will then be on the queue. But if we fail to make workers then there
   // are pending requests.
   while (waitingForWorkerQueue.length) {
-    const {src, uncompressedSize, type, resolve} = waitingForWorkerQueue.shift();
+    const {src, type, resolve, reject} = waitingForWorkerQueue.shift();
     let data = src;
     if (isBlob(src)) {
       data = await readBlobAsUint8Array(src);
     }
-    inflateRawLocal(data, uncompressedSize, type, resolve);
+    inflateRawLocal(data, type, resolve, reject);
   }
 }
 

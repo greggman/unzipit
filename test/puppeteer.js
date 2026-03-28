@@ -11,7 +11,10 @@ const port = 3000;
 app.use(express.static(path.dirname(__dirname)));
 const server = app.listen(port, () => {
   console.log(`Example app listening on port ${port}!`);
-  test(port);
+  test(port).catch(err => {
+    console.error(err);
+    process.exit(1);  // eslint-disable-line
+  });
 });
 
 function makePromiseInfo() {
@@ -25,12 +28,18 @@ function makePromiseInfo() {
 
 
 async function test(port) {
-  const browser = await puppeteer.launch();
+  const browser = await puppeteer.launch({headless: true});
   const page = await browser.newPage();
 
   page.on('console', async e => {
-    const args = await Promise.all(e.args().map(a => a.jsonValue()));
+    const args = await Promise.all(e.args().map(a => a.jsonValue().catch(() => a.toString())));
     console.log(...args);
+  });
+
+  // Prevent unhandled page errors (uncaught exceptions/rejections in the browser)
+  // from propagating to Node.js as unhandled rejections in Puppeteer 21+.
+  page.on('pageerror', err => {
+    console.error('Page error:', err.message);
   });
 
   let totalFailures = 0;
@@ -38,13 +47,17 @@ async function test(port) {
 
   // Get the "viewport" of the page, as reported by the page.
   page.on('domcontentloaded', async() => {
-    const failures = await page.evaluate(() => {
-      return window.testsPromiseInfo.promise;
-    });
+    try {
+      const failures = await page.evaluate(() => {
+        return window.testsPromiseInfo.promise;
+      });
 
-    totalFailures += failures;
+      totalFailures += failures;
 
-    waitingPromiseInfo.resolve();
+      waitingPromiseInfo.resolve();
+    } catch (e) {
+      waitingPromiseInfo.reject(e);
+    }
   });
 
   const urls = [

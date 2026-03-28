@@ -3,3 +3,4 @@ function require() {}
 function define() {}
 var module;
 var exports;
+var DecompressionStream;

@@ -1,6 +1,5 @@
-/* global require */
+/* global require, DecompressionStream */
 
-import {inflateRaw} from 'uzip-module';
 import {readBlobAsUint8Array, isBlob, isNode} from './utils.js';
 
 // note: we only handle the inflate portion in a worker
@@ -40,8 +39,31 @@ const msgHelper = (function() {
 // then 50 blobs will be asked to be read at once.
 // If feels like that should happen at a higher level (user code)
 // or a lower level (the browser)?
+async function decompressRaw(src) {
+  const ds = new DecompressionStream('deflate-raw');
+  const writer = ds.writable.getWriter();
+  writer.write(src).then(() => writer.close()).catch(() => {});
+  const chunks = [];
+  const reader = ds.readable.getReader();
+  for (;;) {
+    const {done, value} = await reader.read();
+    if (done) {
+      break;
+    }
+    chunks.push(value);
+  }
+  const size = chunks.reduce((s, c) => s + c.byteLength, 0);
+  const result = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return result;
+}
+
 async function inflate(req) {
-  const {id, src, uncompressedSize, type} = req;
+  const {id, src, type} = req;
   try {
     let srcData;
     if (isBlob(src)) {
@@ -49,8 +71,7 @@ async function inflate(req) {
     } else {
       srcData = new Uint8Array(src);
     }
-    const dstData = new Uint8Array(uncompressedSize);
-    inflateRaw(srcData, dstData);
+    const dstData = await decompressRaw(srcData);
     const transferables = [];
     let data;
     if (type) {

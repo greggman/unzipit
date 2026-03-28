@@ -601,7 +601,6 @@ Follow the instructions on testing but add  `?timeout=0` to the URL as in `http:
 # Acknowledgements
 
 * The code is **heavily** based on [yauzl](https://github.com/thejoshwolfe/yauzl)
-* The code uses the es6 module version of [uzip.js](https://www.npmjs.com/package/uzip-module)
 
 # Licence
 
