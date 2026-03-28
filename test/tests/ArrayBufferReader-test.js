@@ -1,7 +1,7 @@
 /* global chai, describe, it */
 const assert = chai.assert;
 
-import ArrayBufferReader from '../../src/ArrayBufferReader.js';
+import {ArrayBufferReader} from '../../dist/unzipit.module.js';
 
 describe('ArrayBufferReader', function() {
   describe('ArrayBuffer', function() {

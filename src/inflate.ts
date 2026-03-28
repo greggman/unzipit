@@ -1,8 +1,25 @@
 /* global module, DecompressionStream */
 
-import {isNode, isBlob, readBlobAsUint8Array} from './utils';
+import {isNode, isBlob, readBlobAsUint8Array} from './utils.js';
 
-const config = {
+// Available as the CJS module object in UMD/CJS contexts at runtime.
+// TypeScript sees it as a compile-time global; rollup's UMD wrapper
+// provides the actual value at runtime in Node/CJS environments.
+declare const module: { require?: (id: string) => unknown };
+
+export interface UnzipitOptions {
+  useWorkers?: boolean;
+  workerURL?: string;
+  numWorkers?: number;
+}
+
+interface Config {
+  numWorkers: number;
+  workerURL: string;
+  useWorkers: boolean;
+}
+
+const config: Config = {
   numWorkers: 1,
   workerURL: '',
   useWorkers: false,
@@ -25,15 +42,28 @@ let nextId = 0;
 // come in before a worker gets added to `workers`
 let numWorkers = 0;
 let canUseWorkers = true;   // gets set to false if we can't start a worker
-const workers = [];
-const availableWorkers = [];
-const waitingForWorkerQueue = [];
-const currentlyProcessingIdToRequestMap = new Map();
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const workers: any[] = [];
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const availableWorkers: any[] = [];
 
-function handleResult(e) {
+interface InflateRequest {
+  id: number;
+  src: Uint8Array<ArrayBuffer> | Blob;
+  uncompressedSize: number;
+  type?: string;
+  resolve: (value: ArrayBuffer | Blob) => void;
+  reject: (reason: unknown) => void;
+}
+
+const waitingForWorkerQueue: InflateRequest[] = [];
+const currentlyProcessingIdToRequestMap = new Map<number, InflateRequest>();
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function handleResult(e: any): void {
   makeWorkerAvailable(e.target);
   const {id, error, data} = e.data;
-  const request = currentlyProcessingIdToRequestMap.get(id);
+  const request = currentlyProcessingIdToRequestMap.get(id)!;
   currentlyProcessingIdToRequestMap.delete(id);
   if (error) {
     request.reject(error);
@@ -43,46 +73,60 @@ function handleResult(e) {
 }
 
 // Because Firefox uses non-standard onerror to signal an error.
-function startWorker(url) {
+function startWorker(url: string): Promise<Worker> {
   return new Promise((resolve, reject) => {
     const worker = new Worker(url);
-    worker.onmessage = (e) => {
+    worker.onmessage = (e: MessageEvent) => {
       if (e.data === 'start') {
-        worker.onerror = undefined;
-        worker.onmessage = undefined;
+        worker.onerror = null;
+        worker.onmessage = null;
         resolve(worker);
       } else {
         reject(new Error(`unexpected message: ${e.data}`));
       }
     };
-    worker.onerror = reject;
+    worker.onerror = reject as (event: ErrorEvent) => void;
   });
 }
 
-function dynamicRequire(mod, request) {
+function dynamicRequire(mod: { require?: (id: string) => unknown }, request: string): unknown {
   return mod.require ? mod.require(request) : {};
 }
 
-const workerHelper = (function() {
+interface WorkerHelper {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  createWorker(url: string): Promise<any>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  addEventListener(worker: any, fn: (e: any) => void): void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  terminate(worker: any): Promise<void>;
+}
+
+const workerHelper: WorkerHelper = (function(): WorkerHelper {
   if (isNode) {
     // We need to use `dynamicRequire` because `require` on it's own will be optimized by webpack.
-    const {Worker} = dynamicRequire(module, 'worker_threads');
+    const {Worker: NodeWorker} = dynamicRequire(module, 'worker_threads') as { Worker: new (url: string) => unknown };
     return {
-      async createWorker(url) {
-        return new Worker(url);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      async createWorker(url: string): Promise<any> {
+        return new NodeWorker(url);
       },
-      addEventListener(worker, fn) {
-        worker.on('message', (data) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      addEventListener(worker: any, fn: (e: any) => void): void {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        worker.on('message', (data: any) => {
           fn({target: worker, data});
         });
       },
-      async terminate(worker) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      async terminate(worker: any): Promise<void> {
         await worker.terminate();
       },
     };
   } else {
     return {
-      async createWorker(url) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      async createWorker(url: string): Promise<any> {
         // I don't understand this security issue
         // Apparently there is some iframe setting or http header
         // that prevents cross domain workers. But, I can manually
@@ -95,7 +139,7 @@ const workerHelper = (function() {
           console.warn('could not load worker:', url);
         }
 
-        let text;
+        let text: string | undefined;
         try {
           const req = await fetch(url, {mode: 'cors'});
           if (!req.ok) {
@@ -124,22 +168,26 @@ const workerHelper = (function() {
         console.warn('workers will not be used');
         throw new Error('can not start workers');
       },
-      addEventListener(worker, fn) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      addEventListener(worker: any, fn: (e: any) => void): void {
         worker.addEventListener('message', fn);
       },
-      async terminate(worker) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      async terminate(worker: any): Promise<void> {
         worker.terminate();
       },
     };
   }
 }());
 
-function makeWorkerAvailable(worker) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function makeWorkerAvailable(worker: any): void {
   availableWorkers.push(worker);
   processWaitingForWorkerQueue();
 }
 
-async function getAvailableWorker() {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function getAvailableWorker(): Promise<any> {
   if (availableWorkers.length === 0 && numWorkers < config.numWorkers) {
     ++numWorkers;  // see comment at numWorkers declaration
     try {
@@ -155,14 +203,13 @@ async function getAvailableWorker() {
   return availableWorkers.pop();
 }
 
-async function decompressRaw(src) {
+async function decompressRaw(src: Uint8Array<ArrayBuffer>): Promise<Uint8Array<ArrayBuffer>> {
   const ds = new DecompressionStream('deflate-raw');
   const writer = ds.writable.getWriter();
-  const data = src instanceof Uint8Array ? src : new Uint8Array(src);
   // Do not await the write — doing so before reading causes a deadlock when
   // the internal buffer fills due to backpressure.
-  writer.write(data).then(() => writer.close()).catch(() => {});
-  const chunks = [];
+  writer.write(src).then(() => writer.close()).catch(() => {});
+  const chunks: Uint8Array[] = [];
   const reader = ds.readable.getReader();
   for (;;) {
     const {done, value} = await reader.read();
@@ -184,7 +231,12 @@ async function decompressRaw(src) {
 // @param {Uint8Array} src
 // @param {string} [type] mime-type
 // @returns {ArrayBuffer|Blob} ArrayBuffer if type is falsy or Blob otherwise.
-async function inflateRawLocal(src, type, resolve, reject) {
+async function inflateRawLocal(
+    src: Uint8Array<ArrayBuffer>,
+    type: string | undefined,
+    resolve: (value: ArrayBuffer | Blob) => void,
+    reject: (reason: unknown) => void,
+): Promise<void> {
   try {
     const dst = await decompressRaw(src);
     resolve(type ? new Blob([dst], {type}) : dst.buffer);
@@ -193,7 +245,7 @@ async function inflateRawLocal(src, type, resolve, reject) {
   }
 }
 
-async function processWaitingForWorkerQueue() {
+async function processWaitingForWorkerQueue(): Promise<void> {
   if (waitingForWorkerQueue.length === 0) {
     return;
   }
@@ -208,9 +260,9 @@ async function processWaitingForWorkerQueue() {
           makeWorkerAvailable(worker);
           return;
         }
-        const {id, src, uncompressedSize, type, resolve, reject} = waitingForWorkerQueue.shift();
-        currentlyProcessingIdToRequestMap.set(id, {id, resolve, reject});
-        const transferables = [];
+        const {id, src, uncompressedSize, type, resolve, reject} = waitingForWorkerQueue.shift()!;
+        currentlyProcessingIdToRequestMap.set(id, {id, src, uncompressedSize, type, resolve, reject});
+        const transferables: Transferable[] = [];
         // NOTE: Originally I thought you could transfer an ArrayBuffer.
         // The code on this side is often using views into the entire file
         // which means if we transferred we'd lose the entire file. That sucks
@@ -244,16 +296,13 @@ async function processWaitingForWorkerQueue() {
   // will then be on the queue. But if we fail to make workers then there
   // are pending requests.
   while (waitingForWorkerQueue.length) {
-    const {src, type, resolve, reject} = waitingForWorkerQueue.shift();
-    let data = src;
-    if (isBlob(src)) {
-      data = await readBlobAsUint8Array(src);
-    }
+    const {src, type, resolve, reject} = waitingForWorkerQueue.shift()!;
+    const data = isBlob(src) ? await readBlobAsUint8Array(src) : src;
     inflateRawLocal(data, type, resolve, reject);
   }
 }
 
-export function setOptions(options) {
+export function setOptions(options: UnzipitOptions): void {
   config.workerURL = options.workerURL || config.workerURL;
   // there's no reason to set the workerURL if you're not going to use workers
   if (options.workerURL) {
@@ -275,7 +324,7 @@ export function setOptions(options) {
 // @param {number} uncompressedSize
 // @param {string} [type] falsy or mimeType string (eg: 'image/png')
 // @returns {ArrayBuffer|Blob} ArrayBuffer if type is falsy or Blob otherwise.
-export function inflateRawAsync(src, uncompressedSize, type) {
+export function inflateRawAsync(src: Uint8Array<ArrayBuffer> | Blob, uncompressedSize: number, type?: string): Promise<ArrayBuffer | Blob> {
   return new Promise((resolve, reject) => {
     // note: there is potential an expensive copy here. In order for the data
     // to make it into the worker we need to copy the data to the worker unless
@@ -299,11 +348,11 @@ export function inflateRawAsync(src, uncompressedSize, type) {
   });
 }
 
-function clearArray(arr) {
+function clearArray<T>(arr: T[]): void {
   arr.splice(0, arr.length);
 }
 
-export async function cleanup() {
+export async function cleanup(): Promise<void> {
   for (const worker of workers) {
     await workerHelper.terminate(worker);
   }

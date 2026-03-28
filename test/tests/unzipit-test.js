@@ -2,7 +2,9 @@
 const assert = chai.assert;
 
 import {unzip, unzipRaw, setOptions, cleanup, HTTPRangeReader} from '../../dist/unzipit.module.js';
-import {readBlobAsArrayBuffer} from '../../src/utils.js';
+function readBlobAsArrayBuffer(blob) {
+  return blob.arrayBuffer();
+}
 
 async function assertThrowsAsync(method, msg = '') {
   let error = null;

@@ -1,6 +1,14 @@
 /* global require, DecompressionStream */
 
-import {readBlobAsUint8Array, isBlob, isNode} from './utils.js';
+import { readBlobAsUint8Array, isBlob, isNode } from './utils.js';
+
+// Available as a global in CJS/Node.js worker_threads context
+declare function require(id: string): any;  // eslint-disable-line @typescript-eslint/no-explicit-any
+
+interface MsgHelper {
+  postMessage(msg: unknown, transfer?: Transferable[]): void;
+  addEventListener(type: string, fn: (data: unknown) => void): void;
+}
 
 // note: we only handle the inflate portion in a worker
 // every other part is already async and JavaScript
@@ -8,7 +16,10 @@ import {readBlobAsUint8Array, isBlob, isNode} from './utils.js';
 // zip file then the loop going through the directory
 // might take time but that's an unlikely situation.
 
-const msgHelper = (function() {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyWorkerSelf = { postMessage(msg: unknown, transfer?: Transferable[]): void; addEventListener(type: string, fn: (e: any) => void): void };
+
+const msgHelper: MsgHelper = (function(): MsgHelper {
   if (isNode) {
     const { parentPort } = require('worker_threads');
 
@@ -17,10 +28,13 @@ const msgHelper = (function() {
       addEventListener: parentPort.on.bind(parentPort),
     };
   } else {
+    const workerSelf = self as unknown as AnyWorkerSelf;
     return {
-      postMessage: self.postMessage.bind(self),
-      addEventListener(type, fn) {
-        self.addEventListener(type, (e) => {
+      postMessage(msg: unknown, transfer?: Transferable[]): void {
+        workerSelf.postMessage(msg, transfer);
+      },
+      addEventListener(type: string, fn: (data: unknown) => void): void {
+        workerSelf.addEventListener(type, (e: MessageEvent) => {
           fn(e.data);
         });
       },
@@ -39,11 +53,11 @@ const msgHelper = (function() {
 // then 50 blobs will be asked to be read at once.
 // If feels like that should happen at a higher level (user code)
 // or a lower level (the browser)?
-async function decompressRaw(src) {
+async function decompressRaw(src: Uint8Array<ArrayBuffer>): Promise<Uint8Array<ArrayBuffer>> {
   const ds = new DecompressionStream('deflate-raw');
   const writer = ds.writable.getWriter();
   writer.write(src).then(() => writer.close()).catch(() => {});
-  const chunks = [];
+  const chunks: Uint8Array[] = [];
   const reader = ds.readable.getReader();
   for (;;) {
     const {done, value} = await reader.read();
@@ -62,18 +76,21 @@ async function decompressRaw(src) {
   return result;
 }
 
-async function inflate(req) {
+interface InflateReq {
+  id: number;
+  src: Blob | ArrayBuffer;  // worker receives ArrayBuffer (not SharedArrayBuffer) over postMessage
+  type?: string;
+}
+
+async function inflate(req: InflateReq): Promise<void> {
   const {id, src, type} = req;
   try {
-    let srcData;
-    if (isBlob(src)) {
-      srcData = await readBlobAsUint8Array(src);
-    } else {
-      srcData = new Uint8Array(src);
-    }
+    const srcData: Uint8Array<ArrayBuffer> = isBlob(src)
+      ? await readBlobAsUint8Array(src)
+      : new Uint8Array(src);
     const dstData = await decompressRaw(srcData);
-    const transferables = [];
-    let data;
+    const transferables: Transferable[] = [];
+    let data: Blob | ArrayBuffer;
     if (type) {
       data = new Blob([dstData], {type});
     } else {
@@ -88,17 +105,18 @@ async function inflate(req) {
     console.error(e);
     msgHelper.postMessage({
       id,
-      error: `${e.toString()}`,
+      error: `${e}`,
     });
   }
 }
 
-const handlers = {
+const handlers: Record<string, (req: InflateReq) => Promise<void>> = {
   inflate,
 };
 
-msgHelper.addEventListener('message', function(e) {
-  const {type, data} = e;
+msgHelper.addEventListener('message', function(e: unknown) {
+  const msg = e as { type: string; data: InflateReq };
+  const {type, data} = msg;
   const fn = handlers[type];
   if (!fn) {
     throw new Error('no handler for type: ' + type);

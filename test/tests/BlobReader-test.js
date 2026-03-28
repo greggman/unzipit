@@ -1,7 +1,7 @@
 /* global chai, describe, it */
 const assert = chai.assert;
 
-import BlobReader from '../../src/BlobReader.js';
+import {BlobReader} from '../../dist/unzipit.module.js';
 
 describe('BlobReader', function() {
   describe('Blob', function() {

@@ -1,17 +1,22 @@
 import ArrayBufferReader from './ArrayBufferReader.js';
 import BlobReader from './BlobReader.js';
+export { ArrayBufferReader, BlobReader };
 export * from './HTTPRangeReader.js';
+export type { Reader } from './BlobReader.js';
 
 import {
   inflateRawAsync,
   setOptions as setWorkerOptions,
   cleanup as cleanupInflate,
 } from './inflate.js';
+export type { UnzipitOptions } from './inflate.js';
 import {
   isBlob,
   isSharedArrayBuffer,
   isTypedArraySameAsArrayBuffer,
 } from './utils.js';
+
+import type { Reader } from './BlobReader.js';
 
 /*
 class Zip {
@@ -22,7 +27,53 @@ class Zip {
 }
 */
 
-function dosDateTimeToDate(date, time) {
+export interface Zip {
+  comment: string;
+  commentBytes: Uint8Array;
+}
+
+export interface ZipInfoRaw {
+  zip: Zip;
+  entries: ZipEntry[];
+}
+
+export interface ZipInfo {
+  zip: Zip;
+  entries: { [key: string]: ZipEntry };
+}
+
+export type TypedArray = Int8Array | Uint8Array | Int16Array | Uint16Array | Int32Array | Uint32Array | Float32Array;
+
+interface ExtraField {
+  id: number;
+  data: Uint8Array;
+}
+
+interface RawEntry {
+  versionMadeBy: number;
+  versionNeededToExtract: number;
+  generalPurposeBitFlag: number;
+  compressionMethod: number;
+  lastModFileTime: number;
+  lastModFileDate: number;
+  crc32: number;
+  compressedSize: number;
+  uncompressedSize: number;
+  fileNameLength: number;
+  extraFieldLength: number;
+  fileCommentLength: number;
+  internalFileAttributes: number;
+  externalFileAttributes: number;
+  relativeOffsetOfLocalHeader: number;
+  nameBytes: Uint8Array;
+  name: string;
+  extraFields: ExtraField[];
+  commentBytes: Uint8Array;
+  comment: string;
+  fileName?: string;
+}
+
+function dosDateTimeToDate(date: number, time: number): Date {
   const day = date & 0x1f; // 1-31
   const month = (date >> 5 & 0xf) - 1; // 1-12, 0-11
   const year = (date >> 9 & 0x7f) + 1980; // 0-128, 1980-2108
@@ -35,8 +86,23 @@ function dosDateTimeToDate(date, time) {
   return new Date(year, month, day, hour, minute, second, millisecond);
 }
 
-class ZipEntry {
-  constructor(reader, rawEntry) {
+export class ZipEntry {
+  private _reader: Reader;
+  private _rawEntry: RawEntry;
+  name: string;
+  nameBytes: Uint8Array;
+  size: number;
+  compressedSize: number;
+  comment: string;
+  commentBytes: Uint8Array;
+  compressionMethod: number;
+  lastModDate: Date;
+  isDirectory: boolean;
+  encrypted: boolean;
+  externalFileAttributes: number;
+  versionMadeBy: number;
+
+  constructor(reader: Reader, rawEntry: RawEntry) {
     this._reader = reader;
     this._rawEntry = rawEntry;
     this.name = rawEntry.name;
@@ -53,20 +119,21 @@ class ZipEntry {
     this.versionMadeBy = rawEntry.versionMadeBy;
   }
   // returns a promise that returns a Blob for this entry
-  async blob(type = 'application/octet-stream') {
+  async blob(type = 'application/octet-stream'): Promise<Blob> {
     return await readEntryDataAsBlob(this._reader, this._rawEntry, type);
   }
   // returns a promise that returns an ArrayBuffer for this entry
-  async arrayBuffer() {
+  async arrayBuffer(): Promise<ArrayBuffer> {
     return await readEntryDataAsArrayBuffer(this._reader, this._rawEntry);
   }
   // returns text, assumes the text is valid utf8. If you want more options decode arrayBuffer yourself
-  async text() {
+  async text(): Promise<string> {
     const buffer = await this.arrayBuffer();
     return decodeBuffer(new Uint8Array(buffer), true);
   }
   // returns text with JSON.parse called on it. If you want more options decode arrayBuffer yourself
-  async json() {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async json(): Promise<any> {
     const text = await this.text();
     return JSON.parse(text);
   }
@@ -77,7 +144,7 @@ const MAX_COMMENT_SIZE = 0xffff; // 2-byte size
 const EOCDR_SIGNATURE = 0x06054b50;
 const ZIP64_EOCDR_SIGNATURE = 0x06064b50;
 
-async function readAs(reader, offset, length) {
+async function readAs(reader: Reader, offset: number, length: number): Promise<Uint8Array<ArrayBuffer>> {
   return await reader.read(offset, length);
 }
 
@@ -101,7 +168,7 @@ async function readAs(reader, offset, length) {
 // hack.
 //
 // For now this hack works even if it's not generic.
-async function readAsBlobOrTypedArray(reader, offset, length, type) {
+async function readAsBlobOrTypedArray(reader: Reader, offset: number, length: number, type?: string): Promise<Blob | Uint8Array<ArrayBuffer>> {
   if (reader.sliceAsBlob) {
     return await reader.sliceAsBlob(offset, length, type);
   }
@@ -114,26 +181,26 @@ const crc = {
   },
 };
 
-function getUint16LE(uint8View, offset) {
+function getUint16LE(uint8View: Uint8Array, offset: number): number {
   return uint8View[offset    ] +
          uint8View[offset + 1] * 0x100;
 }
 
-function getUint32LE(uint8View, offset) {
+function getUint32LE(uint8View: Uint8Array, offset: number): number {
   return uint8View[offset    ] +
          uint8View[offset + 1] * 0x100 +
          uint8View[offset + 2] * 0x10000 +
          uint8View[offset + 3] * 0x1000000;
 }
 
-function getUint64LE(uint8View, offset) {
+function getUint64LE(uint8View: Uint8Array, offset: number): number {
   return getUint32LE(uint8View, offset) +
          getUint32LE(uint8View, offset + 4) * 0x100000000;
 }
 
 /* eslint-disable no-irregular-whitespace */
 // const decodeCP437 = (function() {
-//   const cp437 = '\u0000☺☻♥♦♣♠•◘○◙♂♀♪♫☼►◄↕‼¶§▬↨↑↓→←∟↔▲▼ !"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~⌂ÇüéâäàåçêëèïîìÄÅÉæÆôöòûùÿÖÜ¢£¥₧ƒáíóúñÑªº¿⌐¬½¼¡«»░▒▓│┤╡╢╖╕╣║╗╝╜╛┐└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀αßΓπΣσµτΦΘΩδ∞φε∩≡±≥≤⌠⌡÷≈°∙·√ⁿ²■ ';
+//   const cp437 = '\u0000☺☻♥♦♣♠•◘○◙♂♀♪♫☼►◄↕‼¶§▬↨↑↓→←∟↔▲▼ !"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~⌂ÇüéâäàåçêëèïîìÄÅÉæÆôöòûùÿÖÜ¢£¥₧ƒáíóúñÑªº¿⌐¬½¼¡«»░▒▓│┤╡╢╖╕╣║╗╝╜╛┐└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀αßΓπΣσµτΦΘΩδ∞φε∩≡±≥≤⌠⌡÷≈°∙·√ⁿ²■ ';
 //
 //   return function(uint8view) {
 //     return Array.from(uint8view).map(v => cp437[v]).join('');
@@ -142,7 +209,7 @@ function getUint64LE(uint8View, offset) {
 /* eslint-enable no-irregular-whitespace */
 
 const utf8Decoder = new TextDecoder();
-function decodeBuffer(uint8View, isUTF8) {  /* eslint-disable-line no-unused-vars */ /* lgtm [js/superfluous-trailing-arguments] */
+function decodeBuffer(uint8View: Uint8Array, isUTF8: boolean): string {  /* eslint-disable-line no-unused-vars */ /* lgtm [js/superfluous-trailing-arguments] */
   if (isSharedArrayBuffer(uint8View.buffer)) {
     uint8View = new Uint8Array(uint8View);
   }
@@ -156,7 +223,7 @@ function decodeBuffer(uint8View, isUTF8) {  /* eslint-disable-line no-unused-var
   */
 }
 
-async function findEndOfCentralDirector(reader, totalLength) {
+async function findEndOfCentralDirector(reader: Reader, totalLength: number): Promise<ZipInfoRaw> {
   const size = Math.min(EOCDR_WITHOUT_COMMENT_SIZE + MAX_COMMENT_SIZE, totalLength);
   const readStart = totalLength - size;
   const data = await readAs(reader, readStart, size);
@@ -191,7 +258,7 @@ async function findEndOfCentralDirector(reader, totalLength) {
     // 22 - Comment
     // the encoding is always cp437.
     const commentBytes = new Uint8Array(eocdr.buffer, eocdr.byteOffset + 22, commentLength);
-    const comment = decodeBuffer(commentBytes);
+    const comment = decodeBuffer(commentBytes, false);
 
     if (entryCount === 0xffff || centralDirectoryOffset === 0xffffffff) {
       return await readZip64CentralDirectory(reader, readStart + i, comment, commentBytes);
@@ -205,7 +272,7 @@ async function findEndOfCentralDirector(reader, totalLength) {
 
 const END_OF_CENTRAL_DIRECTORY_LOCATOR_SIGNATURE = 0x07064b50;
 
-async function readZip64CentralDirectory(reader, offset, comment, commentBytes) {
+async function readZip64CentralDirectory(reader: Reader, offset: number, comment: string, commentBytes: Uint8Array): Promise<ZipInfoRaw> {
   // ZIP64 Zip64 end of central directory locator
   const zip64EocdlOffset = offset - 20;
   const eocdl = await readAs(reader, zip64EocdlOffset, 20);
@@ -245,10 +312,17 @@ async function readZip64CentralDirectory(reader, offset, comment, commentBytes) 
 
 const CENTRAL_DIRECTORY_FILE_HEADER_SIGNATURE = 0x02014b50;
 
-async function readEntries(reader, centralDirectoryOffset, centralDirectorySize, rawEntryCount, comment, commentBytes) {
+async function readEntries(
+    reader: Reader,
+    centralDirectoryOffset: number,
+    centralDirectorySize: number,
+    rawEntryCount: number,
+    comment: string,
+    commentBytes: Uint8Array,
+): Promise<ZipInfoRaw> {
   let readEntryCursor = 0;
   const allEntriesBuffer = await readAs(reader, centralDirectoryOffset, centralDirectorySize);
-  const rawEntries = [];
+  const rawEntries: RawEntry[] = [];
 
   for (let e = 0; e < rawEntryCount; ++e) {
     const buffer = allEntriesBuffer.subarray(readEntryCursor, readEntryCursor + 46);
@@ -289,7 +363,7 @@ async function readEntries(reader, centralDirectoryOffset, centralDirectorySize,
       externalFileAttributes: getUint32LE(buffer, 38),
       // 42 - Relative offset of local file header
       relativeOffsetOfLocalHeader: getUint32LE(buffer, 42),
-    };
+    } as RawEntry;
 
     if (rawEntry.generalPurposeBitFlag & 0x40) {
       throw new Error('strong encryption is not supported');
@@ -374,9 +448,9 @@ async function readEntries(reader, centralDirectoryOffset, centralDirectorySize,
         e.id === 0x7075 &&
         e.data.length >= 6 && // too short to be meaningful
         e.data[0] === 1 &&    // Version       1 byte      version of this extra field, currently 1
-        getUint32LE(e.data, 1), crc.unsigned(rawEntry.nameBytes)); // NameCRC32     4 bytes     File Name Field CRC32 Checksum
-                                                                   // > If the CRC check fails, this UTF-8 Path Extra Field should be
-                                                                   // > ignored and the File Name field in the header should be used instead.
+        getUint32LE(e.data, 1), crc.unsigned()); // NameCRC32     4 bytes     File Name Field CRC32 Checksum
+                                                 // > If the CRC check fails, this UTF-8 Path Extra Field should be
+                                                 // > ignored and the File Name field in the header should be used instead.
     if (nameField) {
         // UnicodeName Variable UTF-8 version of the entry File Name
         rawEntry.fileName = decodeBuffer(nameField.data.slice(5), true);
@@ -395,7 +469,7 @@ async function readEntries(reader, centralDirectoryOffset, centralDirectorySize,
     }
     rawEntries.push(rawEntry);
   }
-  const zip = {
+  const zip: Zip = {
     comment,
     commentBytes,
   };
@@ -405,7 +479,12 @@ async function readEntries(reader, centralDirectoryOffset, centralDirectorySize,
   };
 }
 
-async function readEntryDataHeader(reader, rawEntry) {
+interface EntryDataHeader {
+  decompress: boolean;
+  fileDataStart: number;
+}
+
+async function readEntryDataHeader(reader: Reader, rawEntry: RawEntry): Promise<EntryDataHeader> {
   if (rawEntry.generalPurposeBitFlag & 0x1) {
     throw new Error('encrypted entries not supported');
   }
@@ -436,7 +515,7 @@ async function readEntryDataHeader(reader, rawEntry) {
   // 30 - File name
   // 30+n - Extra field
   const localFileHeaderEnd = rawEntry.relativeOffsetOfLocalHeader + buffer.length + fileNameLength + extraFieldLength;
-  let decompress;
+  let decompress: boolean;
   if (rawEntry.compressionMethod === 0) {
     // 0 - The file is stored (no compression)
     decompress = false;
@@ -462,7 +541,7 @@ async function readEntryDataHeader(reader, rawEntry) {
   };
 }
 
-async function readEntryDataAsArrayBuffer(reader, rawEntry) {
+async function readEntryDataAsArrayBuffer(reader: Reader, rawEntry: RawEntry): Promise<ArrayBuffer> {
   const {decompress, fileDataStart} = await readEntryDataHeader(reader, rawEntry);
   if (!decompress) {
     const dataView = await readAs(reader, fileDataStart, rawEntry.compressedSize);
@@ -480,39 +559,39 @@ async function readEntryDataAsArrayBuffer(reader, rawEntry) {
   }
   // see comment in readEntryDateAsBlob
   const typedArrayOrBlob = await readAsBlobOrTypedArray(reader, fileDataStart, rawEntry.compressedSize);
-  const result = await inflateRawAsync(typedArrayOrBlob, rawEntry.uncompressedSize);
-  return result;
+  const result = await inflateRawAsync(typedArrayOrBlob instanceof Uint8Array ? typedArrayOrBlob : typedArrayOrBlob, rawEntry.uncompressedSize);
+  return result as ArrayBuffer;
 }
 
-async function readEntryDataAsBlob(reader, rawEntry, type) {
+async function readEntryDataAsBlob(reader: Reader, rawEntry: RawEntry, type: string): Promise<Blob> {
   const {decompress, fileDataStart} = await readEntryDataHeader(reader, rawEntry);
   if (!decompress) {
     const typedArrayOrBlob = await readAsBlobOrTypedArray(reader, fileDataStart, rawEntry.compressedSize, type);
     if (isBlob(typedArrayOrBlob)) {
       return typedArrayOrBlob;
     }
-    return new Blob([isSharedArrayBuffer(typedArrayOrBlob.buffer) ? new Uint8Array(typedArrayOrBlob) : typedArrayOrBlob], {type});
+    return new Blob([typedArrayOrBlob], {type});
   }
   // Here's the issue with this mess (should refactor?)
   // if the source is a blob then we really want to pass a blob to inflateRawAsync to avoid a large
   // copy if we're going to a worker.
   const typedArrayOrBlob = await readAsBlobOrTypedArray(reader, fileDataStart, rawEntry.compressedSize);
-  const result = await inflateRawAsync(typedArrayOrBlob, rawEntry.uncompressedSize, type);
-  return result;
+  const result = await inflateRawAsync(typedArrayOrBlob instanceof Uint8Array ? typedArrayOrBlob : typedArrayOrBlob, rawEntry.uncompressedSize, type);
+  return result as Blob;
 }
 
-export function setOptions(options) {
+export function setOptions(options: import('./inflate').UnzipitOptions): void {
   setWorkerOptions(options);
 }
 
-export async function unzipRaw(source) {
-  let reader;
+export async function unzipRaw(source: string | ArrayBuffer | TypedArray | SharedArrayBuffer | Blob | Reader): Promise<ZipInfoRaw> {
+  let reader: Reader;
   if (typeof Blob !== 'undefined' && source instanceof Blob) {
     reader = new BlobReader(source);
-  } else if (source instanceof ArrayBuffer || (source && source.buffer && source.buffer instanceof ArrayBuffer)) {
-    reader = new ArrayBufferReader(source);
-  } else if (isSharedArrayBuffer(source) || isSharedArrayBuffer(source.buffer)) {
-    reader = new ArrayBufferReader(source);
+  } else if (source instanceof ArrayBuffer || (source && (source as ArrayBufferView).buffer && (source as ArrayBufferView).buffer instanceof ArrayBuffer)) {
+    reader = new ArrayBufferReader(source as ArrayBuffer | ArrayBufferView);
+  } else if (isSharedArrayBuffer(source) || isSharedArrayBuffer((source as ArrayBufferView).buffer)) {
+    reader = new ArrayBufferReader(source as SharedArrayBuffer);
   } else if (typeof source === 'string') {
     const req = await fetch(source);
     if (!req.ok) {
@@ -520,8 +599,8 @@ export async function unzipRaw(source) {
     }
     const blob = await req.blob();
     reader = new BlobReader(blob);
-  } else if (typeof source.getLength === 'function' && typeof source.read === 'function') {
-    reader = source;
+  } else if (typeof (source as Reader).getLength === 'function' && typeof (source as Reader).read === 'function') {
+    reader = source as Reader;
   } else {
     throw new Error('unsupported source type');
   }
@@ -536,7 +615,7 @@ export async function unzipRaw(source) {
 }
 
 // If the names are not utf8 you should use unzipitRaw
-export async function unzip(source) {
+export async function unzip(source: string | ArrayBuffer | TypedArray | SharedArrayBuffer | Blob | Reader): Promise<ZipInfo> {
   const {zip, entries} = await unzipRaw(source);
   return {
     zip,
@@ -544,6 +623,6 @@ export async function unzip(source) {
   };
 }
 
-export function cleanup() {
+export function cleanup(): void {
   cleanupInflate();
 }
