@@ -20,36 +20,24 @@
 
       window.testsPromiseInfo = makePromise();
     </script>
-    <script src="../../node_modules/chai/chai.js"></script>
     <script src="../mocha.js"></script>
-    <script>
+    <script type="module">
+    import * as chai from '../chai.js';
+    window.chai = chai;
+
     /* global mocha */
-    async function main() {
-      mocha.setup('bdd');
-      mocha.fullTrace();
-      mocha.timeout(10000);
-      const query = Object.fromEntries(new URLSearchParams(window.location.search).entries());
-      if (query.timeout !== undefined) {
-        mocha.timeout(query.timeout);
-      }
-      if (typeof chai === 'undefined') {
-        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/chai/4.2.0/chai.min.js');
-      }
-      loadScript('ts-test.js', 'module');
+    mocha.setup('bdd');
+    mocha.fullTrace();
+    mocha.timeout(10000);
+    const query = Object.fromEntries(new URLSearchParams(window.location.search).entries());
+    if (query.timeout !== undefined) {
+      mocha.timeout(query.timeout);
     }
 
-    function loadScript(url, type = 'text/javascript') {
-      return new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-        script.onload = resolve;
-        script.onerror = reject;
-        script.type = type;
-        script.src = url;
-        document.head.appendChild(script);
-      });
-    }
-
-    main();
+    const script = document.createElement('script');
+    script.type = 'module';
+    script.src = 'ts-test.js';
+    document.head.appendChild(script);
     </script>
   </body>
 </html>

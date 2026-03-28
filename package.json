@@ -10,7 +10,7 @@
     "node": ">=18"
   },
   "scripts": {
-    "build": "npm run build-js && npm run build-types",
+    "build": "npm run build-js && npm run build-types && node build/copy.js node_modules/chai/index.js test/chai.js",
     "build-normal": "rollup -c",
     "build-js": "rollup -c",
     "build-min": "rollup -c && google-closure-compiler --warning_level=VERBOSE --jscomp_off=globalThis --jscomp_off=checkTypes --externs build/externs.js --language_in=ECMASCRIPT_2019 --language_out=ECMASCRIPT_2019 --js dist/unzipit.js --js_output_file dist/unzipit.min.js && google-closure-compiler --warning_level=VERBOSE --jscomp_off=globalThis --jscomp_off=checkTypes --externs build/externs.js --language_in=ECMASCRIPT_2019 --language_out=ECMASCRIPT_2019 --js dist/unzipit-worker.js --js_output_file dist/unzipit-worker.min.js && node ./build/append-banner.js dist/unzipit.min.js dist/unzipit-worker.min.js",
@@ -42,7 +42,7 @@
     "@rollup/plugin-typescript": "^12.1.2",
     "@types/chai": "^4.2.12",
     "@types/mocha": "^8.0.3",
-    "chai": "^4.2.0",
+    "chai": "^6.2.2",
     "eslint": "^7.9.0",
     "eslint-plugin-html": "^6.1.0",
     "eslint-plugin-one-variable-per-var": "0.0.3",

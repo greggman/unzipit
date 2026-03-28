@@ -1,13 +1,12 @@
 
 /* eslint-env node, mocha */
-import chai from 'chai';
+import {assert} from 'chai';
 import {createHash} from 'crypto';
 import {promises as fsPromises} from 'fs';
 import path from 'path';
 import {fileURLToPath} from 'url';
 import {unzip, setOptions, cleanup} from '../dist/unzipit.module.js';
 
-const assert = chai.assert;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 async function sha256(uint8view) {
