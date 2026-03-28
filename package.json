@@ -2,6 +2,7 @@
   "name": "unzipit",
   "version": "1.4.3",
   "description": "random access unzip library for JavaScript",
+  "type": "module",
   "main": "dist/unzipit.js",
   "module": "dist/unzipit.module.js",
   "types": "dist/unzipit.d.ts",

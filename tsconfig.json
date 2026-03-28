@@ -2,9 +2,9 @@
   "compilerOptions": {
     "target": "ES2019",
     "module": "ESNext",
+    "moduleResolution": "bundler",
     "lib": ["ES2019", "DOM", "DOM.Iterable"],
     "strict": true,
-    "moduleResolution": "bundler",
     "skipLibCheck": true,
     "noEmit": true
   },

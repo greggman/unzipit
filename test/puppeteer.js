@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 
-/* global require, __dirname */
+import puppeteer from 'puppeteer';
+import path from 'path';
+import {fileURLToPath} from 'url';
+import express from 'express';
 
-const puppeteer = require('puppeteer');
-const path = require('path');
-const express = require('express');
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const port = 3000;
 

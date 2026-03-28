@@ -1,13 +1,17 @@
 
 /* eslint-env node, mocha */
-const assert = require('chai').assert;
-const {unzip, setOptions, cleanup} = require('../dist/unzipit.js');
-const fsPromises = require('fs').promises;
-const path = require('path');
-const crypto = require('crypto');
+import chai from 'chai';
+import {createHash} from 'crypto';
+import {promises as fsPromises} from 'fs';
+import path from 'path';
+import {fileURLToPath} from 'url';
+import {unzip, setOptions, cleanup} from '../dist/unzipit.module.js';
+
+const assert = chai.assert;
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 async function sha256(uint8view) {
-  return crypto.createHash('sha256').update(uint8view).digest('hex');
+  return createHash('sha256').update(uint8view).digest('hex');
 }
 
 async function checkZipEntriesMatchExpected(entries, expectedFiles) {

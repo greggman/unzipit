@@ -1,11 +1,6 @@
-/* global module, DecompressionStream */
+/* global DecompressionStream */
 
 import {isNode, isBlob, readBlobAsUint8Array} from './utils.js';
-
-// Available as the CJS module object in UMD/CJS contexts at runtime.
-// TypeScript sees it as a compile-time global; rollup's UMD wrapper
-// provides the actual value at runtime in Node/CJS environments.
-declare const module: { require?: (id: string) => unknown };
 
 export interface UnzipitOptions {
   useWorkers?: boolean;
@@ -89,10 +84,6 @@ function startWorker(url: string): Promise<Worker> {
   });
 }
 
-function dynamicRequire(mod: { require?: (id: string) => unknown }, request: string): unknown {
-  return mod.require ? mod.require(request) : {};
-}
-
 interface WorkerHelper {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   createWorker(url: string): Promise<any>;
@@ -104,12 +95,11 @@ interface WorkerHelper {
 
 const workerHelper: WorkerHelper = (function(): WorkerHelper {
   if (isNode) {
-    // We need to use `dynamicRequire` because `require` on it's own will be optimized by webpack.
-    const {Worker: NodeWorker} = dynamicRequire(module, 'worker_threads') as { Worker: new (url: string) => unknown };
     return {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       async createWorker(url: string): Promise<any> {
-        return new NodeWorker(url);
+        const { Worker } = await import('worker_threads') as { Worker: new (url: string) => unknown };
+        return new Worker(url);
       },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       addEventListener(worker: any, fn: (e: any) => void): void {

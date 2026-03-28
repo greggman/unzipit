@@ -1,5 +1,5 @@
-/* global require, process */
-const fs = require('fs');
+import fs from 'fs';
+
 const pkg = JSON.parse(fs.readFileSync('package.json', {encoding: 'utf8'}));
 const banner = `/* unzipit@${pkg.version}, license MIT */`;
 

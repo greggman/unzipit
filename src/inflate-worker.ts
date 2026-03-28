@@ -1,46 +1,12 @@
-/* global require, DecompressionStream */
+/* global DecompressionStream */
 
 import { readBlobAsUint8Array, isBlob, isNode } from './utils.js';
-
-// Available as a global in CJS/Node.js worker_threads context
-declare function require(id: string): any;  // eslint-disable-line @typescript-eslint/no-explicit-any
-
-interface MsgHelper {
-  postMessage(msg: unknown, transfer?: Transferable[]): void;
-  addEventListener(type: string, fn: (data: unknown) => void): void;
-}
 
 // note: we only handle the inflate portion in a worker
 // every other part is already async and JavaScript
 // is non blocking. I suppose if you had a million entry
 // zip file then the loop going through the directory
 // might take time but that's an unlikely situation.
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyWorkerSelf = { postMessage(msg: unknown, transfer?: Transferable[]): void; addEventListener(type: string, fn: (e: any) => void): void };
-
-const msgHelper: MsgHelper = (function(): MsgHelper {
-  if (isNode) {
-    const { parentPort } = require('worker_threads');
-
-    return {
-      postMessage: parentPort.postMessage.bind(parentPort),
-      addEventListener: parentPort.on.bind(parentPort),
-    };
-  } else {
-    const workerSelf = self as unknown as AnyWorkerSelf;
-    return {
-      postMessage(msg: unknown, transfer?: Transferable[]): void {
-        workerSelf.postMessage(msg, transfer);
-      },
-      addEventListener(type: string, fn: (data: unknown) => void): void {
-        workerSelf.addEventListener(type, (e: MessageEvent) => {
-          fn(e.data);
-        });
-      },
-    };
-  }
-}());
 
 // class InflateRequest {
 //   id: string,
@@ -82,7 +48,9 @@ interface InflateReq {
   type?: string;
 }
 
-async function inflate(req: InflateReq): Promise<void> {
+type PostMessageFn = (msg: unknown, transfer?: Transferable[]) => void;
+
+async function inflate(req: InflateReq, postMessage: PostMessageFn): Promise<void> {
   const {id, src, type} = req;
   try {
     const srcData: Uint8Array<ArrayBuffer> = isBlob(src)
@@ -97,35 +65,38 @@ async function inflate(req: InflateReq): Promise<void> {
       data = dstData.buffer;
       transferables.push(data);
     }
-    msgHelper.postMessage({
-      id,
-      data,
-    }, transferables);
+    postMessage({ id, data }, transferables);
   } catch (e) {
     console.error(e);
-    msgHelper.postMessage({
-      id,
-      error: `${e}`,
-    });
+    postMessage({ id, error: `${e}` });
   }
 }
 
-const handlers: Record<string, (req: InflateReq) => Promise<void>> = {
-  inflate,
-};
-
-msgHelper.addEventListener('message', function(e: unknown) {
-  const msg = e as { type: string; data: InflateReq };
-  const {type, data} = msg;
-  const fn = handlers[type];
-  if (!fn) {
+function handleMessage(msg: unknown, postMessage: PostMessageFn): void {
+  const { type, data } = msg as { type: string; data: InflateReq };
+  if (type === 'inflate') {
+    inflate(data, postMessage);
+  } else {
     throw new Error('no handler for type: ' + type);
   }
-  fn(data);
-});
+}
 
-if (!isNode) {
-  // needed for firefox AFAICT as there so no other
-  // way to know a worker loaded successfully.?
-  msgHelper.postMessage('start');
+if (isNode) {
+  // Use dynamic import so this works in both CJS and ESM contexts.
+  // The import of a built-in resolves before any messages can arrive.
+  import('worker_threads').then(({ parentPort }) => {
+    parentPort!.on('message', (msg: unknown) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      handleMessage(msg, (m, t) => parentPort!.postMessage(m, t as any));
+    });
+  });
+} else {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const workerSelf = self as any;
+  workerSelf.addEventListener('message', (e: MessageEvent) => {
+    handleMessage(e.data, (m, t) => workerSelf.postMessage(m, t));
+  });
+  // needed for firefox AFAICT as there is no other
+  // way to know a worker loaded successfully.
+  workerSelf.postMessage('start');
 }
