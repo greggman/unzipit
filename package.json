@@ -11,6 +11,7 @@
   },
   "scripts": {
     "build": "npm run build-js && npm run build-types && node build/copy.js node_modules/chai/index.js test/chai.js && node build/copy.js node_modules/mocha/mocha.js test/mocha.js && node build/copy.js node_modules/mocha/mocha.css test/mocha.css",
+    "build-ci": "npm run build && node build/prep-for-deploy.js",
     "build-normal": "rollup -c",
     "build-js": "rollup -c",
     "build-types": "tsc -p tsconfig.build.json",

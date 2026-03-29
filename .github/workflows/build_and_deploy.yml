@@ -22,8 +22,15 @@ jobs:
         run: |
           npm ci
           npm run eslint
-          npm run build
+          npm run build-ci
           npm test
+
+      - name: Upload build artifacts
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: build
+          path: .
 
   publish:
     needs: build
