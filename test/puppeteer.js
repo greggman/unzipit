@@ -14,7 +14,7 @@ const server = app.listen(port, () => {
   console.log(`Example app listening on port ${port}!`);
   test(port).catch(err => {
     console.error(err);
-    process.exit(1);  // eslint-disable-line
+    process.exit(1);
   });
 });
 
@@ -75,5 +75,5 @@ async function test(port) {
   await browser.close();
   server.close();
 
-  process.exit(totalFailures ? 1 : 0);  // eslint-disable-line
+  process.exit(totalFailures ? 1 : 0);
 }

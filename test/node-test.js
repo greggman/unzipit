@@ -1,5 +1,4 @@
 
-/* eslint-env node, mocha */
 import {assert} from 'chai';
 import {createHash} from 'crypto';
 import {promises as fsPromises} from 'fs';
@@ -83,14 +82,14 @@ describe('unzipit', function() {
 
   const longContent = `${new Array(200).fill('compress').join('')}\n`;
   const expectedStuff = {
-    'stuff/': { isDir: true, },
+    'stuff/': { isDir: true },
     'stuff/dog.txt': { content: 'german shepard\n' },
-    'stuff/birds/': { isDir: true, },
+    'stuff/birds/': { isDir: true },
     'stuff/birds/bird.txt': { content: 'parrot\n' },
-    'stuff/cat.txt': { content: 'siamese\n', },
-    'stuff/json.txt': { content: '{"name":"homer","age":50}', },
-    'stuff/long.txt': { content: longContent, },
-    'stuff/ⓤⓝⓘⓒⓞⓓⓔ-𝖋𝖎𝖑𝖊𝖓𝖆𝖒𝖊-😱.txt': { content: 'Lookma! Unicode 😜', },
+    'stuff/cat.txt': { content: 'siamese\n' },
+    'stuff/json.txt': { content: '{"name":"homer","age":50}' },
+    'stuff/long.txt': { content: longContent },
+    'stuff/ⓤⓝⓘⓒⓞⓓⓔ-𝖋𝖎𝖑𝖊𝖓𝖆𝖒𝖊-😱.txt': { content: 'Lookma! Unicode 😜' },
   };
 
   function addTests() {
@@ -118,14 +117,14 @@ describe('unzipit', function() {
       const {entries} = await unzip(reader);
 
       const expected = {
-        'large/': { isDir: true, },
-        'large/antwerp-central-station.jpg':   { sha256: '197246a6bba4570387bee455245a30c95329ed5538eaa2a3fec7df5e2aad53f7', },
-        'large/phones-in-museum-in-milan.jpg': { sha256: '6465b0c16c76737bd0f74ab79d9b75fd7558f74364be422a37aec85c8612013c', },
-        'large/colosseum.jpg':                 { sha256: '6081d144babcd0c2d3ea5c49de83811516148301d9afc6a83f5e63c3cd54d00a', },
-        'large/chocolate-store-istanbul.jpg':  { sha256: '3ee7bc868e1bf1d647598a6e430d636424485f536fb50359e6f82ec24013308c', },
-        'large/tokyo-from-skytree.jpg':        { sha256: 'd66f4ec1eef9bcf86371fe82f217cdd71e346c3e850b31d3e3c0c2f342af4ad2', },
-        'large/LICENSE.txt':                   { sha256: '95be0160e771271be4015afc340ccf15f4e70e2581c5ca090d0a39be17395ac2', },
-        'large/cherry-blossoms-tokyo.jpg':     { sha256: '07c398b3acc1edc5ef47bd7c1da2160d66f9c297d2967e30f2009f79b5e6eb0e', },
+        'large/': { isDir: true },
+        'large/antwerp-central-station.jpg':   { sha256: '197246a6bba4570387bee455245a30c95329ed5538eaa2a3fec7df5e2aad53f7' },
+        'large/phones-in-museum-in-milan.jpg': { sha256: '6465b0c16c76737bd0f74ab79d9b75fd7558f74364be422a37aec85c8612013c' },
+        'large/colosseum.jpg':                 { sha256: '6081d144babcd0c2d3ea5c49de83811516148301d9afc6a83f5e63c3cd54d00a' },
+        'large/chocolate-store-istanbul.jpg':  { sha256: '3ee7bc868e1bf1d647598a6e430d636424485f536fb50359e6f82ec24013308c' },
+        'large/tokyo-from-skytree.jpg':        { sha256: 'd66f4ec1eef9bcf86371fe82f217cdd71e346c3e850b31d3e3c0c2f342af4ad2' },
+        'large/LICENSE.txt':                   { sha256: '95be0160e771271be4015afc340ccf15f4e70e2581c5ca090d0a39be17395ac2' },
+        'large/cherry-blossoms-tokyo.jpg':     { sha256: '07c398b3acc1edc5ef47bd7c1da2160d66f9c297d2967e30f2009f79b5e6eb0e' },
       };
 
       await checkZipEntriesMatchExpected(entries, expected);

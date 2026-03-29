@@ -1,5 +1,3 @@
-/* global SharedArrayBuffer, process */
-
 declare const process: {
   versions?: {
     node?: string;

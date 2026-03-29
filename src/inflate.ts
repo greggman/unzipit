@@ -125,7 +125,7 @@ const workerHelper: WorkerHelper = (function(): WorkerHelper {
         try {
           const worker = await startWorker(url);
           return worker;
-        } catch (e) {
+        } catch (_e) {
           console.warn('could not load worker:', url);
         }
 
@@ -140,7 +140,7 @@ const workerHelper: WorkerHelper = (function(): WorkerHelper {
           const worker = await startWorker(url);
           config.workerURL = url;  // this is a hack. What's a better way to structure this code?
           return worker;
-        } catch (e) {
+        } catch (_e) {
           console.warn('could not load worker via fetch:', url);
         }
 
@@ -150,7 +150,7 @@ const workerHelper: WorkerHelper = (function(): WorkerHelper {
             const worker = await startWorker(url);
             config.workerURL = url;
             return worker;
-          } catch (e) {
+          } catch (_e) {
             console.warn('could not load worker via dataURI');
           }
         }
@@ -185,7 +185,7 @@ async function getAvailableWorker(): Promise<any> {
       workers.push(worker);
       availableWorkers.push(worker);
       workerHelper.addEventListener(worker, handleResult);
-    } catch (e) {
+    } catch (_e) {
       // set this global out-of-band (needs refactor)
       canUseWorkers = false;
     }

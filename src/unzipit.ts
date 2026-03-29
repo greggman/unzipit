@@ -198,7 +198,6 @@ function getUint64LE(uint8View: Uint8Array, offset: number): number {
          getUint32LE(uint8View, offset + 4) * 0x100000000;
 }
 
-/* eslint-disable no-irregular-whitespace */
 // const decodeCP437 = (function() {
 //   const cp437 = '\u0000☺☻♥♦♣♠•◘○◙♂♀♪♫☼►◄↕‼¶§▬↨↑↓→←∟↔▲▼ !"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~⌂ÇüéâäàåçêëèïîìÄÅÉæÆôöòûùÿÖÜ¢£¥₧ƒáíóúñÑªº¿⌐¬½¼¡«»░▒▓│┤╡╢╖╕╣║╗╝╜╛┐└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀αßΓπΣσµτΦΘΩδ∞φε∩≡±≥≤⌠⌡÷≈°∙·√ⁿ²■ ';
 //
@@ -206,10 +205,9 @@ function getUint64LE(uint8View: Uint8Array, offset: number): number {
 //     return Array.from(uint8view).map(v => cp437[v]).join('');
 //   };
 // }());
-/* eslint-enable no-irregular-whitespace */
 
 const utf8Decoder = new TextDecoder();
-function decodeBuffer(uint8View: Uint8Array, isUTF8: boolean): string {  /* eslint-disable-line no-unused-vars */ /* lgtm [js/superfluous-trailing-arguments] */
+function decodeBuffer(uint8View: Uint8Array, _isUTF8: boolean): string {
   if (isSharedArrayBuffer(uint8View.buffer)) {
     uint8View = new Uint8Array(uint8View);
   }
