@@ -29,7 +29,14 @@ function makePromiseInfo() {
 
 
 async function test(port) {
-  const browser = await puppeteer.launch({headless: true});
+  const browser = await puppeteer.launch({
+    headless: 'new',
+    protocolTimeout: 4 * 60 * 1000, // 4 mins
+    args: [
+      '--user-agent=puppeteer',
+      '--no-sandbox',
+    ],
+  });
   const page = await browser.newPage();
 
   page.on('console', async e => {

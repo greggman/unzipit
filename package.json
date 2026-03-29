@@ -39,7 +39,7 @@
   "homepage": "https://greggman.github.io/unzipit",
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@rollup/plugin-node-resolve": "^15.3.0",
+    "@rollup/plugin-node-resolve": "^16.0.3",
     "@rollup/plugin-terser": "^1.0.0",
     "@rollup/plugin-typescript": "^12.1.2",
     "@types/chai": "^5.2.3",
