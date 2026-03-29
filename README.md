@@ -450,6 +450,10 @@ to exit since it will wait for the workers to exit.
 
 Use a transpiler like [Babel](https://babeljs.io).
 
+As of version 2 the library uses `DecompressionStream` which is built into node
+since v18 and [in browsers for a while](https://caniuse.com/mdn-api_decompressionstream). For older
+browsers there is [a polyfill](https://github.com/101arrowz/compression-streams-polyfill).
+
 ## Caching
 
 If you ask for the same entry twice it will be read twice and decompressed twice.
