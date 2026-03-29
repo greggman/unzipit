@@ -13,7 +13,6 @@
     "build": "npm run build-js && npm run build-types && node build/copy.js node_modules/chai/index.js test/chai.js && node build/copy.js node_modules/mocha/mocha.js test/mocha.js && node build/copy.js node_modules/mocha/mocha.css test/mocha.css",
     "build-normal": "rollup -c",
     "build-js": "rollup -c",
-    "build-min": "rollup -c && google-closure-compiler --warning_level=VERBOSE --jscomp_off=globalThis --jscomp_off=checkTypes --externs build/externs.js --language_in=ECMASCRIPT_2019 --language_out=ECMASCRIPT_2019 --js dist/unzipit.js --js_output_file dist/unzipit.min.js && google-closure-compiler --warning_level=VERBOSE --jscomp_off=globalThis --jscomp_off=checkTypes --externs build/externs.js --language_in=ECMASCRIPT_2019 --language_out=ECMASCRIPT_2019 --js dist/unzipit-worker.js --js_output_file dist/unzipit-worker.min.js && node ./build/append-banner.js dist/unzipit.min.js dist/unzipit-worker.min.js",
     "build-types": "tsc -p tsconfig.build.json",
     "eslint": "eslint src/**/*.ts test/index.js test/node-test.js test/puppeteer.js test/tests/**/*.js",
     "test": "npm run test-node && npm run test-browser",
@@ -40,6 +39,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@rollup/plugin-node-resolve": "^15.3.0",
+    "@rollup/plugin-terser": "^1.0.0",
     "@rollup/plugin-typescript": "^12.1.2",
     "@types/chai": "^5.2.3",
     "@types/mocha": "^10.0.10",
@@ -48,7 +48,6 @@
     "chai": "^6.2.2",
     "eslint": "^10.1.0",
     "express": "^5.2.1",
-    "google-closure-compiler": "^20260324.0.0",
     "mocha": "^11.7.5",
     "puppeteer": "^24.0.0",
     "rollup": "^4.29.0",
