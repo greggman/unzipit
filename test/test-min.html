@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Unzipit Test Min</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+      img { max-width: 200px; padding: 5px; }
+    </style>
+  </head>
+  <body>
+    <script src="../dist/unzipit.min.js"></script>
+    <script>
+/* global unzipit */
+unzipit.setOptions({
+  workerURL: '../dist/unzipit-worker.min.js',
+  numWorkers: 2,
+});
+
+(async function() {
+
+  const {entries} = await unzipit.unzip('data/large.zip');
+  Object.entries(entries).forEach(async([name, entry]) => {
+    if (name.endsWith('.jpg')) {
+      const blob = await entry.blob();
+      const img = new Image();
+      img.src = URL.createObjectURL(blob);
+      document.body.appendChild(img);
+    }
+  });
+
+}());
+    </script>
+  </body>
+</html>

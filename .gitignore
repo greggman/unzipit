@@ -1,0 +1,10 @@
+*.pyc
+.DS_Store
+node_modules
+
+# -- clip-for-deploy-start --
+
+/dist
+
+# -- clip-for-deploy-end --
+

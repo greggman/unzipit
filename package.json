@@ -1,0 +1,58 @@
+{
+  "name": "unzipit",
+  "version": "1.4.3",
+  "description": "random access unzip library for JavaScript",
+  "type": "module",
+  "main": "dist/unzipit.module.js",
+  "module": "dist/unzipit.module.js",
+  "types": "dist/unzipit.d.ts",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "npm run build-js && npm run build-types && node build/copy.js node_modules/chai/index.js test/chai.js && node build/copy.js node_modules/mocha/mocha.js test/mocha.js && node build/copy.js node_modules/mocha/mocha.css test/mocha.css",
+    "build-ci": "npm run build && node build/prep-for-deploy.js",
+    "build-normal": "rollup -c",
+    "build-js": "rollup -c",
+    "build-types": "tsc -p tsconfig.build.json",
+    "eslint": "eslint src/**/*.ts test/index.js test/node-test.js test/puppeteer.js test/tests/**/*.js",
+    "test": "npm run test-node && npm run test-browser",
+    "test-node": "mocha test/node-test.js",
+    "test-browser": "node test/puppeteer.js"
+  },
+  "files": [
+    "dist/**"
+  ],
+  "keywords": [
+    "zip",
+    "unzip"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/greggman/unzipit.git"
+  },
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/greggman/unzipit/issues"
+  },
+  "homepage": "https://greggman.github.io/unzipit",
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@rollup/plugin-node-resolve": "^16.0.3",
+    "@rollup/plugin-terser": "^1.0.0",
+    "@rollup/plugin-typescript": "^12.1.2",
+    "@types/chai": "^5.2.3",
+    "@types/mocha": "^10.0.10",
+    "@typescript-eslint/eslint-plugin": "^8.57.2",
+    "@typescript-eslint/parser": "^8.57.2",
+    "chai": "^6.2.2",
+    "eslint": "^10.1.0",
+    "express": "^5.2.1",
+    "mocha": "^11.7.5",
+    "puppeteer": "^24.0.0",
+    "rollup": "^4.29.0",
+    "tslib": "^2.8.1",
+    "typescript": "5.9.3"
+  }
+}
