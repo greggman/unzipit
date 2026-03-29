@@ -7,7 +7,7 @@ Random access unzip library for browser and node based JavaScript
 ![Build Status](https://github.com/greggman/unzipit/actions/workflows/test.yml/badge.svg)
 [[Live Tests](https://greggman.github.io/unzipit/test/)]
 
-* Less than 8k gzipped without workers, Less than 13k with.
+* Less than 5k gzipped without workers, Less than 6k with.
 * [6x to 25x faster than JSZip](https://jsperf.com/jszip-vs-unzipit/4) without workers and even faster with
 * Uses far less memory.
 * Can [avoid downloading the entire zip file](#Streaming) if the server supports http range requests.
