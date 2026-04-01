@@ -279,6 +279,7 @@ entries.forEach(entry => {
 Some libraries both zip and unzip.
 IMO those should be separate libraries as there is little if any code to share between
 both. Plenty of projects only need to do one or the other.
+[Here's the sister library for zip](https://greggman.github.io/zipup/).
 
 Similarly inflate and deflate libraries should be separate from zip, unzip libraries.
 You need one or the other not both. See zlib as an example.
@@ -336,6 +337,9 @@ manages them. They don't count as part of the JavaScript heap.
 In node, the examples with the file readers will only read the header and whatever entries' contents
 you ask for so similarly you can avoid having everything in memory except the things you read.
 
+# Zip Creation
+
+see: [zipup](https://greggman.github.io/zipup/)
 
 # API
 
