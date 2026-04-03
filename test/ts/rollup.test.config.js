@@ -9,9 +9,6 @@ function resolveUnzipit() {
       if (source === 'unzipit') {
         return path.resolve('dist/unzipit.module.js');
       }
-      if (source === 'worker_threads') {
-        return path.resolve('test/ts/worker_threads.js');
-      }
       return null;
     },
   };
