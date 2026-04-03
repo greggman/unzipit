@@ -84,7 +84,8 @@ function handleMessage(msg: unknown, postMessage: PostMessageFn): void {
 if (isNode) {
   // Use dynamic import so this works in both CJS and ESM contexts.
   // The import of a built-in resolves before any messages can arrive.
-  import('worker_threads').then(({ parentPort }) => {
+  const moduleId = 'node:worker_threads';
+  import(moduleId).then(({ parentPort }) => {
     parentPort!.on('message', (msg: unknown) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       handleMessage(msg, (m, t) => parentPort!.postMessage(m, t as any));

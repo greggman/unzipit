@@ -1,4 +1,4 @@
-/* unzipit@2.0.0, license MIT */
+/* unzipit@2.0.1, license MIT */
 (function (global, factory) {
   typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
   typeof define === 'function' && define.amd ? define(['exports'], factory) :
@@ -166,7 +166,8 @@
           return {
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               async createWorker(url) {
-                  const { Worker } = await import('worker_threads');
+                  const moduleId = 'node:worker_threads';
+                  const { Worker } = await import(moduleId);
                   return new Worker(url);
               },
               // eslint-disable-next-line @typescript-eslint/no-explicit-any

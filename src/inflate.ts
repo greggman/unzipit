@@ -98,7 +98,8 @@ const workerHelper: WorkerHelper = (function(): WorkerHelper {
     return {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       async createWorker(url: string): Promise<any> {
-        const { Worker } = await import('worker_threads') as { Worker: new (url: string) => unknown };
+        const moduleId = 'node:worker_threads';
+        const { Worker } = await import(moduleId) as { Worker: new (url: string) => unknown };
         return new Worker(url);
       },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

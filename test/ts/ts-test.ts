@@ -1,4 +1,5 @@
-import {unzip, setOptions} from '../../dist/unzipit.module.js';
+import {unzip, setOptions} from 'unzipit';
+import * as chai from 'chai';
 
 interface TestPromiseInfo {
   resolve(failures: number): void; 

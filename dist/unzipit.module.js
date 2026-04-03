@@ -1,4 +1,4 @@
-/* unzipit@2.0.0, license MIT */
+/* unzipit@2.0.1, license MIT */
 var _a, _b;
 function readBlobAsArrayBuffer(blob) {
     if (blob.arrayBuffer) {
@@ -160,7 +160,8 @@ const workerHelper = (function () {
         return {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             async createWorker(url) {
-                const { Worker } = await import('worker_threads');
+                const moduleId = 'node:worker_threads';
+                const { Worker } = await import(moduleId);
                 return new Worker(url);
             },
             // eslint-disable-next-line @typescript-eslint/no-explicit-any

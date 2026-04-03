@@ -1,6 +1,6 @@
 {
   "name": "unzipit",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "random access unzip library for JavaScript",
   "type": "module",
   "main": "dist/unzipit.module.js",
@@ -10,11 +10,12 @@
     "node": ">=18"
   },
   "scripts": {
-    "build": "npm run build-js && npm run build-types && node build/copy.js node_modules/chai/index.js test/chai.js && node build/copy.js node_modules/mocha/mocha.js test/mocha.js && node build/copy.js node_modules/mocha/mocha.css test/mocha.css",
+    "build": "npm run build-js && npm run build-types && npm run build-ts-test && node build/copy.js node_modules/chai/index.js test/chai.js && node build/copy.js node_modules/mocha/mocha.js test/mocha.js && node build/copy.js node_modules/mocha/mocha.css test/mocha.css",
     "build-ci": "npm run build && node build/prep-for-deploy.js",
     "build-normal": "rollup -c",
     "build-js": "rollup -c",
     "build-types": "tsc -p tsconfig.build.json",
+    "build-ts-test": "rollup -c test/ts/rollup.test.config.js",
     "eslint": "eslint src/**/*.ts test/index.js test/node-test.js test/puppeteer.js test/tests/**/*.js",
     "test": "npm run test-node && npm run test-browser",
     "test-node": "mocha test/node-test.js",
