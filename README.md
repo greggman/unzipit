@@ -1,7 +1,7 @@
-# unzipit.js
+# unzipit
 
 <img src="./unzipit-no-anim.png" style="max-width: 640px">
-
+<!-- cut here -->
 Random access unzip library for browser and node based JavaScript
 
 [![Build and Deploy](https://github.com/greggman/unzipit/actions/workflows/build_and_deploy.yml/badge.svg)](https://github.com/greggman/unzipit/actions/workflows/build_and_deploy.yml)

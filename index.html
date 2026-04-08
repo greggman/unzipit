@@ -67,9 +67,10 @@
   <img src="./unzipit.svg" style="width: 100%;">
 </div>
 <div class="content"><div><pre>
+
 Random access unzip library for browser and node based JavaScript
 
-[![Build Status](https://travis-ci.org/greggman/unzipit.svg?branch=master)](https://travis-ci.org/greggman/unzipit)
+[![Build and Deploy](https://github.com/greggman/unzipit/actions/workflows/build_and_deploy.yml/badge.svg)](https://github.com/greggman/unzipit/actions/workflows/build_and_deploy.yml)
 [[Live Tests](https://greggman.github.io/unzipit/test/)]
 
 * Less than 5k gzipped without workers, Less than 6k with.
@@ -79,7 +80,10 @@ Random access unzip library for browser and node based JavaScript
 
 # How to use
 
-Live Example: [https://jsfiddle.net/greggman/awez4sd7/](https://jsfiddle.net/greggman/awez4sd7/)
+* Live Example: [https://jsfiddle.net/greggman/awez4sd7/](https://jsfiddle.net/greggman/awez4sd7/)
+* Live Parallel Example: [https://jsfiddle.net/greggman/cgdjm07f/](https://jsfiddle.net/greggman/cgdjm07f/)
+* Live User File Example: [https://jsfiddle.net/greggman/s2qe7m6b/](https://jsfiddle.net/greggman/s2qe7m6b/)
+* Live User Drag and Drop Example: [https://jsfiddle.net/greggman/oxnhpmL8/](https://jsfiddle.net/greggman/oxnhpmL8/)
 
 ## without workers
 
@@ -90,7 +94,7 @@ async function readFiles(url) {
   const {entries} = await unzip(url);
 
   // print all entries and their sizes
-  for (const [name, entry] in Object.entries(entries)) {
+  for (const [name, entry] of Object.entries(entries)) {
     console.log(name, entry.size);
   }
 
@@ -128,12 +132,54 @@ async function readFiles(url) {
 }
 ```
 
+## In Parallel
+
+```js
+import {unzip, setOptions} from 'unzipit';
+
+setOptions({workerURL: 'path/to/unzipit-worker.module.js'});
+
+async function readFiles(url) {
+  const {entries} = await unzipit.unzip(url);
+  const names = Object.keys(entries);
+  const blobs = await Promise.all(Object.values(entries).map(e => e.blob()));
+
+  // names and blobs are now parallel arrays so do whatever you want.
+  const blobsByName = Object.fromEntries(names.map((name, i) => [name, blobs[i]]));
+}
+```
+
 You can also pass a [`Blob`](https://developer.mozilla.org/en-US/docs/Web/API/Blob),
 [`ArrayBuffer`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/ArrayBuffer),
 [`SharedArrayBuffer`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/SharedArrayBuffer),
 [`TypedArray`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/TypedArray),
 or your own `Reader`
 
+For using without a builder/bundler grab `unzipit.min.js` or `unzipit.module.js` from
+the [`dist`](https://github.com/greggman/unzipit/tree/master/dist) folder and
+include with
+
+```js
+import * as unzipit from `./unzipit.module.js`;
+```
+
+or
+
+```html
+<script src="unzipit.min.js"></script>
+```
+
+or vs CDN
+
+```js
+import * as unzipit from 'https://unpkg.com/unzipit@1.4.0/dist/unzipit.module.js';
+```
+
+or
+
+```html
+<script src="https://unpkg.com/unzipit@1.4.0/dist/unzipit.js"></script>
+```
 ## Node
 
 For node you need to make your own `Reader` or pass in an
@@ -429,6 +475,8 @@ class ZipEntry {
   lastModDate: Date,                // a Date
   isDirectory: bool,                // True if directory
   encrypted: bool,                  // True if encrypted
+  externalFileAttributes: number,   // platform specific file attributes
+  versionMadeBy: number,            // platform that made this file
 }
 ```
 
@@ -471,6 +519,10 @@ to exit since it will wait for the workers to exit.
 ## Supporting old browsers
 
 Use a transpiler like [Babel](https://babeljs.io).
+
+As of version 2 the library uses `DecompressionStream` which is built into node
+since v18 and [in browsers for a while](https://caniuse.com/mdn-api_decompressionstream). For older
+browsers there is [a polyfill](https://github.com/101arrowz/compression-streams-polyfill).
 
 ## Caching
 
@@ -518,6 +570,21 @@ The zip standard predates unicode so it's possible and apparently not uncommon f
 to have non-unicode names. `entry.nameBytes` contains the raw bytes of the filename.
 so you are free to decode the name using your own methods. See example above.
 
+## Filename issues in general.
+
+unzipit doesn't and can't know if a filename is valid for your use case. A zip file
+can have any name with any characters in the filename data. All unzipit can do is give you
+the filename as a string from the zip file. It's up to you do deal with it, for example
+to strip out or replace characters in the filename that are incompatible with your OS.
+For example [this zip file](https://github.com/greggman/unzipit/files/10998616/problem-filenames.zip)
+has these filenames:  `'this#file\\name%is&iffy'`, `'???And This one???'`, `'fo:oo'` which
+I believe are problematic on Windows. A user found a file with double slashes as in `foo//bar`
+so you'll need to decide what to do with that.
+
+There is also the issue a user could make a malicious filename. For example "../../.bash_profile"
+on the hope that some program doesn't check the names and just uses the paths as is.
+If you're going to use unzipit to create files you should check and sanitize your paths.
+
 ## ArrayBuffer and SharedArrayBuffer caveats
 
 If you pass in an `ArrayBuffer` or `SharedArrayBuffer` you need to keep the data unchanged
@@ -542,6 +609,45 @@ size before asking for their content.
 
 unzipit does not currently support encrypted zip files and will throw if you try to get the data for one.
 Put it on the TODO list 😅
+
+## File Attributes
+
+If you want to make an unzip utilitiy using this library you'll need to be able to mark some files as executable.
+That is unforutunately platform specific. For example, Windows has no concept of "mark a file as executable".
+Each zip entry provides a `versionMadeBy` and `externalFileAttributes` property. You could theoretically use
+that to set file attributes. For example
+
+```js
+fs.writeFileSync(filename, data);
+if (process.platform === 'darwin' || process.platform === 'linux') {
+  const platform = entry.versionMadeBy >> 8;
+  const unix = 3;
+  const darwin = 13
+  if (entry.versionMadeBy === unix || entry.versionMadeBy === darwin) {
+    // no idea what's best here
+    //                                                 +- owner read
+    //                                                 |+- owner write
+    //                                                 ||+- owner execute
+    //                                                 |||+- group read
+    //                                                 ||||+- group write
+    //                                                 |||||+- group execute
+    //                                                 ||||||+- other read
+    //                                                 |||||||+- other write
+    //                                                 ||||||||+- other execute
+    //                                                 |||||||||
+    //                                                 VVVVVVVVV
+    let mod = (entry.externalFileAttributes >> 16) & 0b111111111;  // all the bits
+    mod &= 0b111100100;   // remove write and executable from group and other?
+    mod |= 0b110100100;   // add in owner R/W, group R, other R
+    fs.chmodSync(filename, mod);
+  }
+}
+```
+
+## Other Limitations
+
+unzipit only supports the uncompressed and deflate compression algorithms. Other algorithms are defined
+in the zip spec but are uncommon.
 
 # Testing
 
@@ -573,6 +679,7 @@ Follow the instructions on testing but add  `?timeout=0` to the URL as in `http:
 # Licence
 
 MIT
+
 </pre></div></div>
 <style>
 #forkongithub a {
