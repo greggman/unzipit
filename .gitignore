@@ -6,6 +6,7 @@ test/ts/ts-test.js
 # -- clip-for-deploy-start --
 
 /dist
+/index.html
 
 # -- clip-for-deploy-end --
 
