@@ -41,6 +41,7 @@ const filesSHA256 = {
   './data/stuff.zip': '5874f0e9c553daec6a1f2e49992d474353c52a73584317a7122de59e35554608',
   './data/zip-with-zipcrypto-password-test.zip': '64d358059acc469de98a55afa5dda26dd127b1f57b2f0379f4e22f590df1176c',
   './data/zip-with-aes-256-password-test.zip': 'c560801a8043c09320ed1a427a03f83931a51b68f6c3e061c5ee6896f1d49861',
+  './data/deflate-size-larger-than-entry.zip': '500756a96be5d1d4275a00b3416af9bb27fa564049c941b684052909ee8ffcf7',
 };
 
 describe('unzipit', function() {

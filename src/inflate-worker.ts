@@ -1,6 +1,7 @@
 /* global DecompressionStream */
 
 import { readBlobAsUint8Array, isBlob, isNode } from './utils.js';
+import type { InflateRequestData, InflateRequestMessage, InflateResultMessage } from './inflate-types.js';
 
 // note: we only handle the inflate portion in a worker
 // every other part is already async and JavaScript
@@ -47,16 +48,9 @@ async function decompressRaw(src: Uint8Array<ArrayBuffer>, maxLimit?: number): P
   return result;
 }
 
-interface InflateReq {
-  id: number;
-  src: Blob | ArrayBuffer;  // worker receives ArrayBuffer (not SharedArrayBuffer) over postMessage
-  type?: string;
-  uncompressedSize?: number;
-}
+type PostMessageFn = (msg: InflateResultMessage, transfer?: Transferable[]) => void;
 
-type PostMessageFn = (msg: unknown, transfer?: Transferable[]) => void;
-
-async function inflate(req: InflateReq, postMessage: PostMessageFn): Promise<void> {
+async function inflate(req: InflateRequestData, postMessage: PostMessageFn): Promise<void> {
   const {id, src, type} = req;
   try {
     const srcData: Uint8Array<ArrayBuffer> = isBlob(src)
@@ -81,7 +75,7 @@ async function inflate(req: InflateReq, postMessage: PostMessageFn): Promise<voi
 }
 
 function handleMessage(msg: unknown, postMessage: PostMessageFn): void {
-  const { type, data } = msg as { type: string; data: InflateReq };
+  const { type, data } = msg as InflateRequestMessage;
   if (type === 'inflate') {
     inflate(data, postMessage);
   } else {
@@ -101,7 +95,7 @@ if (isNode) {
 } else {
   const workerSelf = self as unknown as {
     addEventListener(type: string, fn: (e: MessageEvent) => void): void;
-    postMessage(msg: unknown, transfer?: Transferable[]): void;
+    postMessage(msg: InflateResultMessage | 'start', transfer?: Transferable[]): void;
   };
   workerSelf.addEventListener('message', (e: MessageEvent) => {
     handleMessage(e.data, (m, t) => workerSelf.postMessage(m, t));

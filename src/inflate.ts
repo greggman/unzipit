@@ -1,6 +1,7 @@
 /* global DecompressionStream */
 
 import {isNode, isBlob, readBlobAsUint8Array} from './utils.js';
+import type {InflateRequestMessage, InflateResultMessage} from './inflate-types.js';
 
 export interface UnzipitOptions {
   useWorkers?: boolean;
@@ -21,10 +22,17 @@ const config: Config = {
 };
 
 interface AnyWorker {
-  on?(event: string, cb: (data: unknown) => void): void;
-  addEventListener?(type: string, fn: (e: unknown) => void): void;
+  on?(event: string, cb: (data: InflateResultMessage) => void): void;
+  addEventListener?(type: string, fn: (e: MessageEvent) => void): void;
   terminate?(): Promise<void> | void;
-  postMessage?(msg: unknown, transfer?: Transferable[]): void;
+  postMessage?(msg: InflateRequestMessage, transfer?: Transferable[]): void;
+}
+
+// The event handed to handleResult. In the browser this is the worker's
+// MessageEvent; in node we synthesize the same shape from the raw message.
+interface WorkerResultEvent {
+  target: AnyWorker;
+  data: InflateResultMessage;
 }
 
 let nextId = 0;
@@ -44,8 +52,8 @@ let nextId = 0;
 // come in before a worker gets added to `workers`
 let numWorkers = 0;
 let canUseWorkers = true;   // gets set to false if we can't start a worker
-const workers: unknown[] = [];
-const availableWorkers: unknown[] = [];
+const workers: AnyWorker[] = [];
+const availableWorkers: AnyWorker[] = [];
 
 interface InflateRequest {
   id: number;
@@ -59,38 +67,29 @@ interface InflateRequest {
 const waitingForWorkerQueue: InflateRequest[] = [];
 const currentlyProcessingIdToRequestMap = new Map<number, InflateRequest>();
 
-function handleResult(e: { target: unknown; data: unknown }): void {
+function handleResult(e: WorkerResultEvent): void {
   makeWorkerAvailable(e.target);
-  const payload = e.data as { id: number; error?: unknown; data?: unknown };
-  const { id, error, data } = payload;
+  const { id, error, data } = e.data;
   const request = currentlyProcessingIdToRequestMap.get(id)!;
   currentlyProcessingIdToRequestMap.delete(id);
   if (error) {
-    request.reject(error);
+    // The worker can only structured-clone the error as a string, so wrap it
+    // back into an Error to match the rejection type of the non-worker path.
+    request.reject(new Error(error));
     return;
   }
 
   // Verify that the decompressed size matches the declared uncompressedSize
   // Treat declared size as authoritative metadata that must be verified.
   const expected = request.uncompressedSize;
-  let actual: number | undefined;
-  if (data instanceof ArrayBuffer) {
-    actual = data.byteLength;
-  } else if (ArrayBuffer.isView(data)) {
-    actual = (data as ArrayBufferView).byteLength;
-  } else if (data && typeof (data as Blob).size === 'number') {
-    // Blob in browsers
-    actual = (data as Blob).size;
-  } else if (data && typeof (data as { byteLength?: number }).byteLength === 'number') {
-    actual = (data as { byteLength: number }).byteLength;
-  }
+  const actual = data instanceof ArrayBuffer ? data.byteLength : data?.size;
 
   if (typeof expected === 'number' && typeof actual === 'number' && expected !== actual) {
     request.reject(new Error(`decompressed size mismatch. declared: ${expected}, actual: ${actual}`));
     return;
   }
 
-  request.resolve(data);
+  request.resolve(data!);
 }
 
 // Because Firefox uses non-standard onerror to signal an error.
@@ -111,33 +110,31 @@ function startWorker(url: string): Promise<Worker> {
 }
 
 interface WorkerHelper {
-
-  createWorker(url: string): Promise<unknown>;
-  addEventListener(worker: unknown, fn: (e: unknown) => void): void;
-  terminate(worker: unknown): Promise<void>;
+  createWorker(url: string): Promise<AnyWorker>;
+  addEventListener(worker: AnyWorker, fn: (e: WorkerResultEvent) => void): void;
+  terminate(worker: AnyWorker): Promise<void>;
 }
 
 const workerHelper: WorkerHelper = (function(): WorkerHelper {
   if (isNode) {
     return {
-
-      async createWorker(url: string): Promise<unknown> {
+      async createWorker(url: string): Promise<AnyWorker> {
         const moduleId = 'node:worker_threads';
-        const { Worker } = await import(moduleId) as { Worker: new (url: string) => unknown };
+        const { Worker } = await import(moduleId) as { Worker: new (url: string) => AnyWorker };
         return new Worker(url);
       },
-      addEventListener(worker: unknown, fn: (e: unknown) => void): void {
-        (worker as AnyWorker).on?.('message', (data: unknown) => {
+      addEventListener(worker: AnyWorker, fn: (e: WorkerResultEvent) => void): void {
+        worker.on?.('message', (data: InflateResultMessage) => {
           fn({ target: worker, data });
         });
       },
-      async terminate(worker: unknown): Promise<void> {
-        await (worker as AnyWorker).terminate?.();
+      async terminate(worker: AnyWorker): Promise<void> {
+        await worker.terminate?.();
       },
     };
   } else {
     return {
-      async createWorker(url: string): Promise<unknown> {
+      async createWorker(url: string): Promise<AnyWorker> {
         // I don't understand this security issue
         // Apparently there is some iframe setting or http header
         // that prevents cross domain workers. But, I can manually
@@ -179,22 +176,24 @@ const workerHelper: WorkerHelper = (function(): WorkerHelper {
         console.warn('workers will not be used');
         throw new Error('can not start workers');
       },
-        addEventListener(worker: unknown, fn: (e: unknown) => void): void {
-          (worker as AnyWorker).addEventListener?.('message', fn);
+        addEventListener(worker: AnyWorker, fn: (e: WorkerResultEvent) => void): void {
+          // The browser delivers a MessageEvent whose `target` is the worker
+          // and whose `data` is the InflateResultMessage, matching WorkerResultEvent.
+          worker.addEventListener?.('message', fn as (e: MessageEvent) => void);
         },
-        async terminate(worker: unknown): Promise<void> {
-          await (worker as AnyWorker).terminate?.();
+        async terminate(worker: AnyWorker): Promise<void> {
+          await worker.terminate?.();
       },
     };
   }
 }());
 
-function makeWorkerAvailable(worker: unknown): void {
+function makeWorkerAvailable(worker: AnyWorker): void {
   availableWorkers.push(worker);
   processWaitingForWorkerQueue();
 }
 
-async function getAvailableWorker(): Promise<unknown> {
+async function getAvailableWorker(): Promise<AnyWorker | undefined> {
   if (availableWorkers.length === 0 && numWorkers < config.numWorkers) {
     ++numWorkers;  // see comment at numWorkers declaration
     try {
@@ -297,7 +296,7 @@ async function processWaitingForWorkerQueue(): Promise<void> {
         //if (!isBlob(src) && !isSharedArrayBuffer(src)) {
         //  transferables.push(src);
         //}
-        worker.postMessage({
+        worker.postMessage?.({
           type: 'inflate',
           data: {
             id,
