@@ -20,6 +20,13 @@ const config: Config = {
   useWorkers: false,
 };
 
+interface AnyWorker {
+  on?(event: string, cb: (data: unknown) => void): void;
+  addEventListener?(type: string, fn: (e: unknown) => void): void;
+  terminate?(): Promise<void> | void;
+  postMessage?(msg: unknown, transfer?: Transferable[]): void;
+}
+
 let nextId = 0;
 
 // Requests are put on a queue.
@@ -37,10 +44,8 @@ let nextId = 0;
 // come in before a worker gets added to `workers`
 let numWorkers = 0;
 let canUseWorkers = true;   // gets set to false if we can't start a worker
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const workers: any[] = [];
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const availableWorkers: any[] = [];
+const workers: unknown[] = [];
+const availableWorkers: unknown[] = [];
 
 interface InflateRequest {
   id: number;
@@ -54,17 +59,38 @@ interface InflateRequest {
 const waitingForWorkerQueue: InflateRequest[] = [];
 const currentlyProcessingIdToRequestMap = new Map<number, InflateRequest>();
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function handleResult(e: any): void {
+function handleResult(e: { target: unknown; data: unknown }): void {
   makeWorkerAvailable(e.target);
-  const {id, error, data} = e.data;
+  const payload = e.data as { id: number; error?: unknown; data?: unknown };
+  const { id, error, data } = payload;
   const request = currentlyProcessingIdToRequestMap.get(id)!;
   currentlyProcessingIdToRequestMap.delete(id);
   if (error) {
     request.reject(error);
-  } else {
-    request.resolve(data);
+    return;
   }
+
+  // Verify that the decompressed size matches the declared uncompressedSize
+  // Treat declared size as authoritative metadata that must be verified.
+  const expected = request.uncompressedSize;
+  let actual: number | undefined;
+  if (data instanceof ArrayBuffer) {
+    actual = data.byteLength;
+  } else if (ArrayBuffer.isView(data)) {
+    actual = (data as ArrayBufferView).byteLength;
+  } else if (data && typeof (data as Blob).size === 'number') {
+    // Blob in browsers
+    actual = (data as Blob).size;
+  } else if (data && typeof (data as { byteLength?: number }).byteLength === 'number') {
+    actual = (data as { byteLength: number }).byteLength;
+  }
+
+  if (typeof expected === 'number' && typeof actual === 'number' && expected !== actual) {
+    request.reject(new Error(`decompressed size mismatch. declared: ${expected}, actual: ${actual}`));
+    return;
+  }
+
+  request.resolve(data);
 }
 
 // Because Firefox uses non-standard onerror to signal an error.
@@ -85,39 +111,33 @@ function startWorker(url: string): Promise<Worker> {
 }
 
 interface WorkerHelper {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  createWorker(url: string): Promise<any>;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  addEventListener(worker: any, fn: (e: any) => void): void;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  terminate(worker: any): Promise<void>;
+
+  createWorker(url: string): Promise<unknown>;
+  addEventListener(worker: unknown, fn: (e: unknown) => void): void;
+  terminate(worker: unknown): Promise<void>;
 }
 
 const workerHelper: WorkerHelper = (function(): WorkerHelper {
   if (isNode) {
     return {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      async createWorker(url: string): Promise<any> {
+
+      async createWorker(url: string): Promise<unknown> {
         const moduleId = 'node:worker_threads';
         const { Worker } = await import(moduleId) as { Worker: new (url: string) => unknown };
         return new Worker(url);
       },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      addEventListener(worker: any, fn: (e: any) => void): void {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        worker.on('message', (data: any) => {
-          fn({target: worker, data});
+      addEventListener(worker: unknown, fn: (e: unknown) => void): void {
+        (worker as AnyWorker).on?.('message', (data: unknown) => {
+          fn({ target: worker, data });
         });
       },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      async terminate(worker: any): Promise<void> {
-        await worker.terminate();
+      async terminate(worker: unknown): Promise<void> {
+        await (worker as AnyWorker).terminate?.();
       },
     };
   } else {
     return {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      async createWorker(url: string): Promise<any> {
+      async createWorker(url: string): Promise<unknown> {
         // I don't understand this security issue
         // Apparently there is some iframe setting or http header
         // that prevents cross domain workers. But, I can manually
@@ -159,26 +179,22 @@ const workerHelper: WorkerHelper = (function(): WorkerHelper {
         console.warn('workers will not be used');
         throw new Error('can not start workers');
       },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      addEventListener(worker: any, fn: (e: any) => void): void {
-        worker.addEventListener('message', fn);
-      },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      async terminate(worker: any): Promise<void> {
-        worker.terminate();
+        addEventListener(worker: unknown, fn: (e: unknown) => void): void {
+          (worker as AnyWorker).addEventListener?.('message', fn);
+        },
+        async terminate(worker: unknown): Promise<void> {
+          await (worker as AnyWorker).terminate?.();
       },
     };
   }
 }());
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function makeWorkerAvailable(worker: any): void {
+function makeWorkerAvailable(worker: unknown): void {
   availableWorkers.push(worker);
   processWaitingForWorkerQueue();
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function getAvailableWorker(): Promise<any> {
+async function getAvailableWorker(): Promise<unknown> {
   if (availableWorkers.length === 0 && numWorkers < config.numWorkers) {
     ++numWorkers;  // see comment at numWorkers declaration
     try {
@@ -194,7 +210,7 @@ async function getAvailableWorker(): Promise<any> {
   return availableWorkers.pop();
 }
 
-async function decompressRaw(src: Uint8Array<ArrayBuffer>): Promise<Uint8Array<ArrayBuffer>> {
+async function decompressRaw(src: Uint8Array<ArrayBuffer>, limit?: number): Promise<Uint8Array<ArrayBuffer>> {
   const ds = new DecompressionStream('deflate-raw');
   const writer = ds.writable.getWriter();
   // Do not await the write — doing so before reading causes a deadlock when
@@ -202,12 +218,19 @@ async function decompressRaw(src: Uint8Array<ArrayBuffer>): Promise<Uint8Array<A
   writer.write(src).then(() => writer.close()).catch(() => {});
   const chunks: Uint8Array[] = [];
   const reader = ds.readable.getReader();
+  let seen = 0;
   for (;;) {
     const {done, value} = await reader.read();
     if (done) {
       break;
     }
+    // If this chunk would push us past the configured/declared limit, abort
+    const newSeen = seen + value.byteLength;
+    if (typeof limit === 'number' && newSeen > limit) {
+      throw new Error(`decompressed size exceeds limit: ${newSeen} > ${limit}`);
+    }
     chunks.push(value);
+    seen = newSeen;
   }
   const size = chunks.reduce((s, c) => s + c.byteLength, 0);
   const result = new Uint8Array(size);
@@ -224,12 +247,19 @@ async function decompressRaw(src: Uint8Array<ArrayBuffer>): Promise<Uint8Array<A
 // @returns {ArrayBuffer|Blob} ArrayBuffer if type is falsy or Blob otherwise.
 async function inflateRawLocal(
     src: Uint8Array<ArrayBuffer>,
+    uncompressedSize: number,
     type: string | undefined,
     resolve: (value: ArrayBuffer | Blob) => void,
     reject: (reason: unknown) => void,
 ): Promise<void> {
   try {
-    const dst = await decompressRaw(src);
+    const limit = uncompressedSize;
+    const dst = await decompressRaw(src, limit);
+    const actual = dst.byteLength;
+    if (typeof uncompressedSize === 'number' && actual !== uncompressedSize) {
+      reject(new Error(`decompressed size mismatch. declared: ${uncompressedSize}, actual: ${actual}`));
+      return;
+    }
     resolve(type ? new Blob([dst], {type}) : dst.buffer);
   } catch (e) {
     reject(e);
@@ -287,9 +317,13 @@ async function processWaitingForWorkerQueue(): Promise<void> {
   // will then be on the queue. But if we fail to make workers then there
   // are pending requests.
   while (waitingForWorkerQueue.length) {
-    const {src, type, resolve, reject} = waitingForWorkerQueue.shift()!;
+    const {src, uncompressedSize, type, resolve, reject} = waitingForWorkerQueue.shift()!;
     const data = isBlob(src) ? await readBlobAsUint8Array(src) : src;
-    inflateRawLocal(data, type, resolve, reject);
+    try {
+      await inflateRawLocal(data, uncompressedSize, type, resolve, reject);
+    } catch (e) {
+      reject(e);
+    }
   }
 }
 

@@ -202,6 +202,13 @@ describe('unzipit', function() {
       }
     });
 
+    it('rejects when declared uncompressedSize is smaller than actual (size-mismatch)', async() => {
+      const {entries} = await loader.load('./data/deflate-size-larger-than-entry.zip');
+      await assertThrowsAsync(async() => {
+        await entries['bomb.txt'].arrayBuffer();
+      });
+    });
+
     it('rejects encrypted zipCrypto entries', async() => {
       const {entries} = await loader.load('./data/zip-with-zipcrypto-password-test.zip');
       await checkZipEntriesMatchExpected(entries, expectedEncrypted, false);

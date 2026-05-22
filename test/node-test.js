@@ -130,6 +130,18 @@ describe('unzipit', function() {
       await checkZipEntriesMatchExpected(entries, expected);
       reader.close();
     });
+
+    it('rejects when declared uncompressedSize is smaller than actual (size-mismatch)', async() => {
+      const zip = await fsPromises.readFile(path.join(__dirname, 'data', 'deflate-size-larger-than-entry.zip'));
+      const { entries } = await unzip(new Uint8Array(zip));
+      const entry = entries['bomb.txt'];
+      try {
+        await entry.arrayBuffer();
+        throw new Error('Expected arrayBuffer to reject for size mismatch');
+      } catch {
+        // success: rejection expected
+      }
+    });
   }
 
   describe('without workers', () => {
@@ -155,4 +167,5 @@ describe('unzipit', function() {
     });
 
   });
+
 });
