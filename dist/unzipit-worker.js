@@ -1,4 +1,4 @@
-/* unzipit@2.0.1, license MIT */
+/* unzipit@2.0.3, license MIT */
 (function (factory) {
   typeof define === 'function' && define.amd ? define(factory) :
   factory();
@@ -47,18 +47,23 @@
   // then 50 blobs will be asked to be read at once.
   // If feels like that should happen at a higher level (user code)
   // or a lower level (the browser)?
-  async function decompressRaw(src) {
+  async function decompressRaw(src, maxLimit) {
       const ds = new DecompressionStream('deflate-raw');
       const writer = ds.writable.getWriter();
       writer.write(src).then(() => writer.close()).catch(() => { });
       const chunks = [];
       const reader = ds.readable.getReader();
+      let seen = 0;
       for (;;) {
           const { done, value } = await reader.read();
           if (done) {
               break;
           }
           chunks.push(value);
+          seen += value.byteLength;
+          if (typeof maxLimit === 'number' && seen > maxLimit) {
+              throw new Error(`decompressed size exceeds limit: ${seen} > ${maxLimit}`);
+          }
       }
       const size = chunks.reduce((s, c) => s + c.byteLength, 0);
       const result = new Uint8Array(size);
@@ -75,7 +80,9 @@
           const srcData = isBlob(src)
               ? await readBlobAsUint8Array(src)
               : new Uint8Array(src);
-          const dstData = await decompressRaw(srcData);
+          // Enforce declared uncompressedSize as the streaming limit
+          const limit = typeof req.uncompressedSize === 'number' ? req.uncompressedSize : undefined;
+          const dstData = await decompressRaw(srcData, limit);
           const transferables = [];
           let data;
           if (type) {
@@ -107,13 +114,11 @@
       const moduleId = 'node:worker_threads';
       import(moduleId).then(({ parentPort }) => {
           parentPort.on('message', (msg) => {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               handleMessage(msg, (m, t) => parentPort.postMessage(m, t));
           });
       });
   }
   else {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const workerSelf = self;
       workerSelf.addEventListener('message', (e) => {
           handleMessage(e.data, (m, t) => workerSelf.postMessage(m, t));

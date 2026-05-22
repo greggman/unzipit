@@ -1,4 +1,4 @@
-/* unzipit@2.0.1, license MIT */
+/* unzipit@2.0.3, license MIT */
 var _a, _b;
 function readBlobAsArrayBuffer(blob) {
     if (blob.arrayBuffer) {
@@ -119,24 +119,30 @@ let nextId = 0;
 // come in before a worker gets added to `workers`
 let numWorkers = 0;
 let canUseWorkers = true; // gets set to false if we can't start a worker
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const workers = [];
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const availableWorkers = [];
 const waitingForWorkerQueue = [];
 const currentlyProcessingIdToRequestMap = new Map();
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function handleResult(e) {
     makeWorkerAvailable(e.target);
     const { id, error, data } = e.data;
     const request = currentlyProcessingIdToRequestMap.get(id);
     currentlyProcessingIdToRequestMap.delete(id);
     if (error) {
-        request.reject(error);
+        // The worker can only structured-clone the error as a string, so wrap it
+        // back into an Error to match the rejection type of the non-worker path.
+        request.reject(new Error(error));
+        return;
     }
-    else {
-        request.resolve(data);
+    // Verify that the decompressed size matches the declared uncompressedSize
+    // Treat declared size as authoritative metadata that must be verified.
+    const expected = request.uncompressedSize;
+    const actual = data instanceof ArrayBuffer ? data.byteLength : data === null || data === void 0 ? void 0 : data.size;
+    if (typeof expected === 'number' && typeof actual === 'number' && expected !== actual) {
+        request.reject(new Error(`decompressed size mismatch. declared: ${expected}, actual: ${actual}`));
+        return;
     }
+    request.resolve(data);
 }
 // Because Firefox uses non-standard onerror to signal an error.
 function startWorker(url) {
@@ -158,28 +164,25 @@ function startWorker(url) {
 const workerHelper = (function () {
     if (isNode) {
         return {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             async createWorker(url) {
                 const moduleId = 'node:worker_threads';
                 const { Worker } = await import(moduleId);
                 return new Worker(url);
             },
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             addEventListener(worker, fn) {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                worker.on('message', (data) => {
+                var _a;
+                (_a = worker.on) === null || _a === void 0 ? void 0 : _a.call(worker, 'message', (data) => {
                     fn({ target: worker, data });
                 });
             },
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             async terminate(worker) {
-                await worker.terminate();
+                var _a;
+                await ((_a = worker.terminate) === null || _a === void 0 ? void 0 : _a.call(worker));
             },
         };
     }
     else {
         return {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             async createWorker(url) {
                 // I don't understand this security issue
                 // Apparently there is some iframe setting or http header
@@ -222,23 +225,23 @@ const workerHelper = (function () {
                 console.warn('workers will not be used');
                 throw new Error('can not start workers');
             },
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             addEventListener(worker, fn) {
-                worker.addEventListener('message', fn);
+                var _a;
+                // The browser delivers a MessageEvent whose `target` is the worker
+                // and whose `data` is the InflateResultMessage, matching WorkerResultEvent.
+                (_a = worker.addEventListener) === null || _a === void 0 ? void 0 : _a.call(worker, 'message', fn);
             },
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             async terminate(worker) {
-                worker.terminate();
+                var _a;
+                await ((_a = worker.terminate) === null || _a === void 0 ? void 0 : _a.call(worker));
             },
         };
     }
 }());
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function makeWorkerAvailable(worker) {
     availableWorkers.push(worker);
     processWaitingForWorkerQueue();
 }
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function getAvailableWorker() {
     if (availableWorkers.length === 0 && numWorkers < config.numWorkers) {
         ++numWorkers; // see comment at numWorkers declaration
@@ -255,7 +258,7 @@ async function getAvailableWorker() {
     }
     return availableWorkers.pop();
 }
-async function decompressRaw(src) {
+async function decompressRaw(src, limit) {
     const ds = new DecompressionStream('deflate-raw');
     const writer = ds.writable.getWriter();
     // Do not await the write — doing so before reading causes a deadlock when
@@ -263,12 +266,19 @@ async function decompressRaw(src) {
     writer.write(src).then(() => writer.close()).catch(() => { });
     const chunks = [];
     const reader = ds.readable.getReader();
+    let seen = 0;
     for (;;) {
         const { done, value } = await reader.read();
         if (done) {
             break;
         }
+        // If this chunk would push us past the configured/declared limit, abort
+        const newSeen = seen + value.byteLength;
+        if (typeof limit === 'number' && newSeen > limit) {
+            throw new Error(`decompressed size exceeds limit: ${newSeen} > ${limit}`);
+        }
         chunks.push(value);
+        seen = newSeen;
     }
     const size = chunks.reduce((s, c) => s + c.byteLength, 0);
     const result = new Uint8Array(size);
@@ -282,9 +292,15 @@ async function decompressRaw(src) {
 // @param {Uint8Array} src
 // @param {string} [type] mime-type
 // @returns {ArrayBuffer|Blob} ArrayBuffer if type is falsy or Blob otherwise.
-async function inflateRawLocal(src, type, resolve, reject) {
+async function inflateRawLocal(src, uncompressedSize, type, resolve, reject) {
     try {
-        const dst = await decompressRaw(src);
+        const limit = uncompressedSize;
+        const dst = await decompressRaw(src, limit);
+        const actual = dst.byteLength;
+        if (typeof uncompressedSize === 'number' && actual !== uncompressedSize) {
+            reject(new Error(`decompressed size mismatch. declared: ${uncompressedSize}, actual: ${actual}`));
+            return;
+        }
         resolve(type ? new Blob([dst], { type }) : dst.buffer);
     }
     catch (e) {
@@ -292,6 +308,7 @@ async function inflateRawLocal(src, type, resolve, reject) {
     }
 }
 async function processWaitingForWorkerQueue() {
+    var _a;
     if (waitingForWorkerQueue.length === 0) {
         return;
     }
@@ -321,7 +338,7 @@ async function processWaitingForWorkerQueue() {
                 //if (!isBlob(src) && !isSharedArrayBuffer(src)) {
                 //  transferables.push(src);
                 //}
-                worker.postMessage({
+                (_a = worker.postMessage) === null || _a === void 0 ? void 0 : _a.call(worker, {
                     type: 'inflate',
                     data: {
                         id,
@@ -340,9 +357,14 @@ async function processWaitingForWorkerQueue() {
     // will then be on the queue. But if we fail to make workers then there
     // are pending requests.
     while (waitingForWorkerQueue.length) {
-        const { src, type, resolve, reject } = waitingForWorkerQueue.shift();
+        const { src, uncompressedSize, type, resolve, reject } = waitingForWorkerQueue.shift();
         const data = isBlob(src) ? await readBlobAsUint8Array(src) : src;
-        inflateRawLocal(data, type, resolve, reject);
+        try {
+            await inflateRawLocal(data, uncompressedSize, type, resolve, reject);
+        }
+        catch (e) {
+            reject(e);
+        }
     }
 }
 function setOptions$1(options) {
