@@ -336,6 +336,41 @@ export function setOptions(options: UnzipitOptions): void {
   config.numWorkers = options.numWorkers || config.numWorkers;
 }
 
+function canStreamBlobToBlob(src: Uint8Array<ArrayBuffer> | Blob): src is Blob {
+  return isBlob(src) &&
+      typeof src.stream === 'function' &&
+      typeof DecompressionStream !== 'undefined' &&
+      typeof TransformStream !== 'undefined' &&
+      typeof Response !== 'undefined';
+}
+
+// Inflate a Blob into a Blob without ever holding the inflated bytes in the
+// JS heap. The compressed bytes are streamed from the source blob through
+// DecompressionStream and collected by Response.blob(), so the result lives
+// in the browser's blob storage which can spill to disk on low-memory devices.
+async function inflateBlobToBlob(src: Blob, uncompressedSize: number, type: string): Promise<Blob> {
+  let seen = 0;
+  const limiter = new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, controller) {
+      seen += chunk.byteLength;
+      // If this chunk would push us past the declared size, abort
+      if (typeof uncompressedSize === 'number' && seen > uncompressedSize) {
+        throw new Error(`decompressed size exceeds limit: ${seen} > ${uncompressedSize}`);
+      }
+      controller.enqueue(chunk);
+    },
+  });
+  const stream = src.stream()
+      .pipeThrough(new DecompressionStream('deflate-raw'))
+      .pipeThrough(limiter);
+  const blob = await new Response(stream).blob();
+  if (typeof uncompressedSize === 'number' && blob.size !== uncompressedSize) {
+    throw new Error(`decompressed size mismatch. declared: ${uncompressedSize}, actual: ${blob.size}`);
+  }
+  // slice does not copy, it just makes a new Blob with the requested type
+  return blob.slice(0, blob.size, type);
+}
+
 // It has to take non-zero time to put a large typed array in a Blob since the very
 // next instruction you could change the contents of the array. So, if you're reading
 // the zip file for images/video/audio then all you want is a Blob on which to get a URL.
@@ -349,6 +384,11 @@ export function setOptions(options: UnzipitOptions): void {
 // @param {string} [type] falsy or mimeType string (eg: 'image/png')
 // @returns {ArrayBuffer|Blob} ArrayBuffer if type is falsy or Blob otherwise.
 export function inflateRawAsync(src: Uint8Array<ArrayBuffer> | Blob, uncompressedSize: number, type?: string): Promise<ArrayBuffer | Blob> {
+  // Blob in, Blob out, no workers: stream it so the inflated data never
+  // needs to fit in the JS heap.
+  if (type && canStreamBlobToBlob(src) && !(config.useWorkers && canUseWorkers)) {
+    return inflateBlobToBlob(src, uncompressedSize, type);
+  }
   return new Promise((resolve, reject) => {
     // note: there is potential an expensive copy here. In order for the data
     // to make it into the worker we need to copy the data to the worker unless
