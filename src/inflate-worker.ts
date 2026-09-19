@@ -1,6 +1,5 @@
-/* global DecompressionStream */
-
-import { readBlobAsUint8Array, isBlob, isNode } from './utils.js';
+import { isNode } from './utils.js';
+import { inflateToResult } from './inflate-stream.js';
 import type { InflateRequestData, InflateRequestMessage, InflateResultMessage } from './inflate-types.js';
 
 // note: we only handle the inflate portion in a worker
@@ -20,52 +19,17 @@ import type { InflateRequestData, InflateRequestMessage, InflateResultMessage } 
 // then 50 blobs will be asked to be read at once.
 // If feels like that should happen at a higher level (user code)
 // or a lower level (the browser)?
-async function decompressRaw(src: Uint8Array<ArrayBuffer>, maxLimit?: number): Promise<Uint8Array<ArrayBuffer>> {
-  const ds = new DecompressionStream('deflate-raw');
-  const writer = ds.writable.getWriter();
-  writer.write(src).then(() => writer.close()).catch(() => {});
-  const chunks: Uint8Array[] = [];
-  const reader = ds.readable.getReader();
-  let seen = 0;
-  for (;;) {
-    const {done, value} = await reader.read();
-    if (done) {
-      break;
-    }
-    chunks.push(value);
-    seen += value.byteLength;
-    if (typeof maxLimit === 'number' && seen > maxLimit) {
-      throw new Error(`decompressed size exceeds limit: ${seen} > ${maxLimit}`);
-    }
-  }
-  const size = chunks.reduce((s, c) => s + c.byteLength, 0);
-  const result = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) {
-    result.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return result;
-}
 
 type PostMessageFn = (msg: InflateResultMessage, transfer?: Transferable[]) => void;
 
 async function inflate(req: InflateRequestData, postMessage: PostMessageFn): Promise<void> {
   const {id, src, type} = req;
   try {
-    const srcData: Uint8Array<ArrayBuffer> = isBlob(src)
-      ? await readBlobAsUint8Array(src)
-      : new Uint8Array(src);
-    // Enforce declared uncompressedSize as the streaming limit
-    const limit = typeof req.uncompressedSize === 'number' ? req.uncompressedSize : undefined;
-    const dstData = await decompressRaw(srcData, limit);
+    // inflateToResult enforces the declared uncompressedSize
+    const data = await inflateToResult(src, req.uncompressedSize, type);
     const transferables: Transferable[] = [];
-    let data: Blob | ArrayBuffer;
-    if (type) {
-      data = new Blob([dstData], {type});
-    } else {
-      data = dstData.buffer;
-      transferables.push(data);
+    if (!type) {
+      transferables.push(data as ArrayBuffer);
     }
     postMessage({ id, data }, transferables);
   } catch (e) {

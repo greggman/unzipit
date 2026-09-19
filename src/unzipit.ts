@@ -6,10 +6,17 @@ export type { Reader } from './BlobReader.js';
 
 import {
   inflateRawAsync,
+  shouldUseWorkers,
   setOptions as setWorkerOptions,
   cleanup as cleanupInflate,
 } from './inflate.js';
 export type { UnzipitOptions } from './inflate.js';
+import {
+  inflateRawStream,
+  readAsStream,
+  streamToArrayBuffer,
+  streamToBlob,
+} from './inflate-stream.js';
 import {
   isBlob,
   isSharedArrayBuffer,
@@ -40,6 +47,12 @@ export interface ZipInfoRaw {
 export interface ZipInfo {
   zip: Zip;
   entries: { [key: string]: ZipEntry };
+}
+
+export interface StreamOptions {
+  // If set, every chunk is exactly this many bytes except the last one.
+  // Otherwise chunks are whatever size the source and decompressor produce.
+  chunkSize?: number;
 }
 
 export type TypedArray = Int8Array | Uint8Array | Int16Array | Uint16Array | Int32Array | Uint32Array | Float32Array;
@@ -121,6 +134,18 @@ export class ZipEntry {
   // returns a promise that returns a Blob for this entry
   async blob(type = 'application/octet-stream'): Promise<Blob> {
     return await readEntryDataAsBlob(this._reader, this._rawEntry, type);
+  }
+  // returns a promise that returns a ReadableStream of this entry's uncompressed bytes.
+  // Data is read and decompressed only as the stream is consumed so memory use
+  // does not depend on the size of the entry. The stream errors if the data does
+  // not match the size declared in the zip. Since that can only be known at the end,
+  // treat the data as unverified until the stream closes without error.
+  async stream(options: StreamOptions = {}): Promise<ReadableStream<Uint8Array>> {
+    const {chunkSize} = options;
+    if (chunkSize !== undefined && !(Number.isSafeInteger(chunkSize) && chunkSize > 0)) {
+      throw new Error(`chunkSize must be a positive integer: ${chunkSize}`);
+    }
+    return await readEntryDataAsStream(this._reader, this._rawEntry, chunkSize);
   }
   // returns a promise that returns an ArrayBuffer for this entry
   async arrayBuffer(): Promise<ArrayBuffer> {
@@ -555,9 +580,13 @@ async function readEntryDataAsArrayBuffer(reader: Reader, rawEntry: RawEntry): P
     //    might not be compressed. For now that's a TBD.
     return isTypedArraySameAsArrayBuffer(dataView) ? dataView.buffer : dataView.slice().buffer;
   }
+  if (!shouldUseWorkers()) {
+    const stream = await inflateEntryDataStream(reader, rawEntry, fileDataStart, true);
+    return await streamToArrayBuffer(stream, rawEntry.uncompressedSize);
+  }
   // see comment in readEntryDateAsBlob
   const typedArrayOrBlob = await readAsBlobOrTypedArray(reader, fileDataStart, rawEntry.compressedSize);
-  const result = await inflateRawAsync(typedArrayOrBlob instanceof Uint8Array ? typedArrayOrBlob : typedArrayOrBlob, rawEntry.uncompressedSize);
+  const result = await inflateRawAsync(typedArrayOrBlob, rawEntry.uncompressedSize);
   return result as ArrayBuffer;
 }
 
@@ -570,12 +599,27 @@ async function readEntryDataAsBlob(reader: Reader, rawEntry: RawEntry, type: str
     }
     return new Blob([typedArrayOrBlob], {type});
   }
+  if (!shouldUseWorkers()) {
+    // Stream into a Blob so the inflated data never needs to fit in the JS heap.
+    const stream = await inflateEntryDataStream(reader, rawEntry, fileDataStart, true);
+    return await streamToBlob(stream, type);
+  }
   // Here's the issue with this mess (should refactor?)
   // if the source is a blob then we really want to pass a blob to inflateRawAsync to avoid a large
   // copy if we're going to a worker.
   const typedArrayOrBlob = await readAsBlobOrTypedArray(reader, fileDataStart, rawEntry.compressedSize);
-  const result = await inflateRawAsync(typedArrayOrBlob instanceof Uint8Array ? typedArrayOrBlob : typedArrayOrBlob, rawEntry.uncompressedSize, type);
+  const result = await inflateRawAsync(typedArrayOrBlob, rawEntry.uncompressedSize, type);
   return result as Blob;
+}
+
+async function inflateEntryDataStream(reader: Reader, rawEntry: RawEntry, fileDataStart: number, decompress: boolean, chunkSize?: number): Promise<ReadableStream<Uint8Array>> {
+  const src = await readAsStream(reader, fileDataStart, rawEntry.compressedSize);
+  return inflateRawStream(src, rawEntry.uncompressedSize, decompress, chunkSize);
+}
+
+async function readEntryDataAsStream(reader: Reader, rawEntry: RawEntry, chunkSize?: number): Promise<ReadableStream<Uint8Array>> {
+  const {decompress, fileDataStart} = await readEntryDataHeader(reader, rawEntry);
+  return await inflateEntryDataStream(reader, rawEntry, fileDataStart, decompress, chunkSize);
 }
 
 export function setOptions(options: import('./inflate').UnzipitOptions): void {
