@@ -13,10 +13,6 @@ function readBlobAsArrayBuffer(blob) {
         reader.readAsArrayBuffer(blob);
     });
 }
-async function readBlobAsUint8Array(blob) {
-    const arrayBuffer = await readBlobAsArrayBuffer(blob);
-    return new Uint8Array(arrayBuffer);
-}
 function isBlob(v) {
     return typeof Blob !== 'undefined' && v instanceof Blob;
 }
@@ -59,6 +55,9 @@ class BlobReader {
         const arrayBuffer = await readBlobAsArrayBuffer(blob);
         return new Uint8Array(arrayBuffer);
     }
+    async readStream(offset, length) {
+        return this.blob.slice(offset, offset + length).stream();
+    }
     async sliceAsBlob(offset, length, type = '') {
         return this.blob.slice(offset, offset + length, type);
     }
@@ -96,9 +95,225 @@ class HTTPRangeReader {
         const buffer = await req.arrayBuffer();
         return new Uint8Array(buffer);
     }
+    async readStream(offset, size) {
+        if (size === 0) {
+            return new Blob([]).stream();
+        }
+        const req = await fetch(this.url, {
+            headers: {
+                Range: `bytes=${offset}-${offset + size - 1}`,
+            },
+        });
+        if (!req.ok) {
+            throw new Error(`failed http request ${this.url}, status: ${req.status} offset: ${offset} size: ${size}: ${req.statusText}`);
+        }
+        // A server that ignores Range sends the whole file with a 200.
+        // Streaming that would silently produce the wrong bytes.
+        if (req.status !== 206) {
+            throw new Error(`server did not honor range request for ${this.url}, status: ${req.status}`);
+        }
+        return req.body;
+    }
 }
 
 /* global DecompressionStream */
+// Streaming building blocks shared by ZipEntry.stream(), the non-worker
+// blob()/arrayBuffer() paths, and the worker. Everything here is a pipeline
+// of streams so memory use is bounded by a few chunks in flight, not by the
+// size of the entry.
+// How much to ask a Reader for per `read` call when it has no `readStream`.
+const kReadSize = 1024 * 1024;
+// Largest piece handed to the DecompressionStream in one write. Deflate can
+// expand about 1000:1 and a DecompressionStream may emit all the output for a
+// write before backpressure can stop it, so this bounds the burst from a
+// malicious zip to roughly 64MB.
+const kMaxInflateInputSize = 64 * 1024;
+// Returns a chunk that owns its own (non-shared) ArrayBuffer. Readers like
+// ArrayBufferReader return views into the user's buffer. We don't want to
+// hand those to a consumer who might transfer/detach them, and
+// DecompressionStream does not accept views on a SharedArrayBuffer.
+function ownChunk(chunk) {
+    return isTypedArraySameAsArrayBuffer(chunk) && !isSharedArrayBuffer(chunk.buffer)
+        ? chunk
+        : chunk.slice();
+}
+// A stream of `length` bytes starting at `offset` from a Reader that only
+// supports `read`. Nothing is read until the consumer pulls.
+function readerToStream(reader, offset, length) {
+    let pos = 0;
+    return new ReadableStream({
+        async pull(controller) {
+            if (pos >= length) {
+                controller.close();
+                return;
+            }
+            const size = Math.min(kReadSize, length - pos);
+            const data = await reader.read(offset + pos, size);
+            if (data.byteLength !== size) {
+                throw new Error(`short read: expected ${size} bytes at offset ${offset + pos}, got ${data.byteLength}`);
+            }
+            pos += size;
+            controller.enqueue(ownChunk(data));
+        },
+    }, { highWaterMark: 0 });
+}
+async function readAsStream(reader, offset, length) {
+    return reader.readStream
+        ? await reader.readStream(offset, length)
+        : readerToStream(reader, offset, length);
+}
+function sourceToStream(src) {
+    if (isBlob(src)) {
+        return src.stream();
+    }
+    return new ReadableStream({
+        start(controller) {
+            controller.enqueue(ownChunk(src));
+            controller.close();
+        },
+    });
+}
+// Splits chunks into views of at most `maxSize` bytes (no copying).
+function splitChunks(maxSize) {
+    return new TransformStream({
+        transform(chunk, controller) {
+            for (let offset = 0; offset < chunk.byteLength; offset += maxSize) {
+                controller.enqueue(chunk.subarray(offset, offset + maxSize));
+            }
+        },
+    });
+}
+// Errors the stream as soon as more than `expected` bytes pass through, and
+// at the end if fewer did. The declared size is metadata from the zip and
+// must be verified.
+function limitSize(expected) {
+    let seen = 0;
+    return new TransformStream({
+        transform(chunk, controller) {
+            seen += chunk.byteLength;
+            if (seen > expected) {
+                throw new Error(`decompressed size exceeds limit: ${seen} > ${expected}`);
+            }
+            controller.enqueue(chunk);
+        },
+        flush() {
+            if (seen !== expected) {
+                throw new Error(`decompressed size mismatch. declared: ${expected}, actual: ${seen}`);
+            }
+        },
+    });
+}
+// Re-chunks the stream so every chunk is exactly `chunkSize` bytes except the last.
+function reChunk(chunkSize) {
+    let buf;
+    let used = 0;
+    return new TransformStream({
+        transform(chunk, controller) {
+            let offset = 0;
+            while (offset < chunk.byteLength) {
+                if (!buf) {
+                    buf = new Uint8Array(chunkSize);
+                    used = 0;
+                }
+                const n = Math.min(chunkSize - used, chunk.byteLength - offset);
+                buf.set(chunk.subarray(offset, offset + n), used);
+                used += n;
+                offset += n;
+                if (used === chunkSize) {
+                    controller.enqueue(buf);
+                    buf = undefined;
+                }
+            }
+        },
+        flush(controller) {
+            if (buf) {
+                controller.enqueue(buf.slice(0, used));
+            }
+        },
+    });
+}
+// Takes a stream of the entry's raw (possibly deflated) bytes and returns a
+// stream of its uncompressed bytes, verified against `uncompressedSize`.
+function inflateRawStream(src, uncompressedSize, decompress, chunkSize) {
+    let stream = src;
+    if (decompress) {
+        stream = stream
+            .pipeThrough(splitChunks(kMaxInflateInputSize))
+            .pipeThrough(new DecompressionStream('deflate-raw'));
+    }
+    stream = stream.pipeThrough(limitSize(uncompressedSize));
+    if (chunkSize) {
+        stream = stream.pipeThrough(reChunk(chunkSize));
+    }
+    return stream;
+}
+// Reads the whole stream into a single ArrayBuffer. `size` is the exact
+// expected size (enforced by inflateRawStream) so we allocate once and copy
+// each chunk in, rather than collecting chunks and concatenating them which
+// would need twice the memory.
+async function streamToArrayBuffer(stream, size) {
+    const result = new Uint8Array(size);
+    let offset = 0;
+    const reader = stream.getReader();
+    for (;;) {
+        const { done, value } = await reader.read();
+        if (done) {
+            break;
+        }
+        if (offset + value.byteLength > size) {
+            // should not happen: inflateRawStream enforces the size.
+            throw new Error(`decompressed size exceeds limit: ${offset + value.byteLength} > ${size}`);
+        }
+        result.set(value, offset);
+        offset += value.byteLength;
+    }
+    return result.buffer;
+}
+// Collects the stream into a Blob without holding it in the JS heap. The
+// browser stores the data in its blob storage, which may page it to disk.
+async function streamToBlob(stream, type) {
+    // Chrome rejects Response.blob() with "TypeError: Failed to fetch" instead
+    // of the stream's error, so remember the real error to rethrow it.
+    let streamError;
+    const reader = stream.getReader();
+    const tapped = new ReadableStream({
+        async pull(controller) {
+            try {
+                const { done, value } = await reader.read();
+                if (done) {
+                    controller.close();
+                }
+                else {
+                    controller.enqueue(value);
+                }
+            }
+            catch (e) {
+                streamError = e;
+                throw e;
+            }
+        },
+        cancel(reason) {
+            return reader.cancel(reason);
+        },
+    }, { highWaterMark: 0 });
+    try {
+        const blob = await new Response(tapped).blob();
+        // slice does not copy, it just makes a new Blob with the requested type
+        return blob.slice(0, blob.size, type);
+    }
+    catch (e) {
+        throw streamError !== null && streamError !== void 0 ? streamError : e;
+    }
+}
+// Inflates an in-memory or Blob source to an ArrayBuffer (no type) or a Blob
+// (type). Used by the worker and by the local fallback when workers fail.
+async function inflateToResult(src, uncompressedSize, type) {
+    const stream = inflateRawStream(sourceToStream(src), uncompressedSize, true);
+    return type
+        ? await streamToBlob(stream, type)
+        : await streamToArrayBuffer(stream, uncompressedSize);
+}
+
 const config = {
     numWorkers: 1,
     workerURL: '',
@@ -258,55 +473,6 @@ async function getAvailableWorker() {
     }
     return availableWorkers.pop();
 }
-async function decompressRaw(src, limit) {
-    const ds = new DecompressionStream('deflate-raw');
-    const writer = ds.writable.getWriter();
-    // Do not await the write — doing so before reading causes a deadlock when
-    // the internal buffer fills due to backpressure.
-    writer.write(src).then(() => writer.close()).catch(() => { });
-    const chunks = [];
-    const reader = ds.readable.getReader();
-    let seen = 0;
-    for (;;) {
-        const { done, value } = await reader.read();
-        if (done) {
-            break;
-        }
-        // If this chunk would push us past the configured/declared limit, abort
-        const newSeen = seen + value.byteLength;
-        if (typeof limit === 'number' && newSeen > limit) {
-            throw new Error(`decompressed size exceeds limit: ${newSeen} > ${limit}`);
-        }
-        chunks.push(value);
-        seen = newSeen;
-    }
-    const size = chunks.reduce((s, c) => s + c.byteLength, 0);
-    const result = new Uint8Array(size);
-    let offset = 0;
-    for (const chunk of chunks) {
-        result.set(chunk, offset);
-        offset += chunk.byteLength;
-    }
-    return result;
-}
-// @param {Uint8Array} src
-// @param {string} [type] mime-type
-// @returns {ArrayBuffer|Blob} ArrayBuffer if type is falsy or Blob otherwise.
-async function inflateRawLocal(src, uncompressedSize, type, resolve, reject) {
-    try {
-        const limit = uncompressedSize;
-        const dst = await decompressRaw(src, limit);
-        const actual = dst.byteLength;
-        if (typeof uncompressedSize === 'number' && actual !== uncompressedSize) {
-            reject(new Error(`decompressed size mismatch. declared: ${uncompressedSize}, actual: ${actual}`));
-            return;
-        }
-        resolve(type ? new Blob([dst], { type }) : dst.buffer);
-    }
-    catch (e) {
-        reject(e);
-    }
-}
 async function processWaitingForWorkerQueue() {
     var _a;
     if (waitingForWorkerQueue.length === 0) {
@@ -358,14 +524,18 @@ async function processWaitingForWorkerQueue() {
     // are pending requests.
     while (waitingForWorkerQueue.length) {
         const { src, uncompressedSize, type, resolve, reject } = waitingForWorkerQueue.shift();
-        const data = isBlob(src) ? await readBlobAsUint8Array(src) : src;
         try {
-            await inflateRawLocal(data, uncompressedSize, type, resolve, reject);
+            resolve(await inflateToResult(src, uncompressedSize, type));
         }
         catch (e) {
             reject(e);
         }
     }
+}
+// True if inflating should go through the worker queue. When false, callers
+// stream the entry directly (see inflate-stream.ts) and skip the queue.
+function shouldUseWorkers() {
+    return config.useWorkers && canUseWorkers;
 }
 function setOptions$1(options) {
     config.workerURL = options.workerURL || config.workerURL;
@@ -456,6 +626,18 @@ class ZipEntry {
     // returns a promise that returns a Blob for this entry
     async blob(type = 'application/octet-stream') {
         return await readEntryDataAsBlob(this._reader, this._rawEntry, type);
+    }
+    // returns a promise that returns a ReadableStream of this entry's uncompressed bytes.
+    // Data is read and decompressed only as the stream is consumed so memory use
+    // does not depend on the size of the entry. The stream errors if the data does
+    // not match the size declared in the zip. Since that can only be known at the end,
+    // treat the data as unverified until the stream closes without error.
+    async stream(options = {}) {
+        const { chunkSize } = options;
+        if (chunkSize !== undefined && !(Number.isSafeInteger(chunkSize) && chunkSize > 0)) {
+            throw new Error(`chunkSize must be a positive integer: ${chunkSize}`);
+        }
+        return await readEntryDataAsStream(this._reader, this._rawEntry, chunkSize);
     }
     // returns a promise that returns an ArrayBuffer for this entry
     async arrayBuffer() {
@@ -842,9 +1024,13 @@ async function readEntryDataAsArrayBuffer(reader, rawEntry) {
         //    might not be compressed. For now that's a TBD.
         return isTypedArraySameAsArrayBuffer(dataView) ? dataView.buffer : dataView.slice().buffer;
     }
+    if (!shouldUseWorkers()) {
+        const stream = await inflateEntryDataStream(reader, rawEntry, fileDataStart, true);
+        return await streamToArrayBuffer(stream, rawEntry.uncompressedSize);
+    }
     // see comment in readEntryDateAsBlob
     const typedArrayOrBlob = await readAsBlobOrTypedArray(reader, fileDataStart, rawEntry.compressedSize);
-    const result = await inflateRawAsync(typedArrayOrBlob instanceof Uint8Array ? typedArrayOrBlob : typedArrayOrBlob, rawEntry.uncompressedSize);
+    const result = await inflateRawAsync(typedArrayOrBlob, rawEntry.uncompressedSize);
     return result;
 }
 async function readEntryDataAsBlob(reader, rawEntry, type) {
@@ -856,12 +1042,25 @@ async function readEntryDataAsBlob(reader, rawEntry, type) {
         }
         return new Blob([typedArrayOrBlob], { type });
     }
+    if (!shouldUseWorkers()) {
+        // Stream into a Blob so the inflated data never needs to fit in the JS heap.
+        const stream = await inflateEntryDataStream(reader, rawEntry, fileDataStart, true);
+        return await streamToBlob(stream, type);
+    }
     // Here's the issue with this mess (should refactor?)
     // if the source is a blob then we really want to pass a blob to inflateRawAsync to avoid a large
     // copy if we're going to a worker.
     const typedArrayOrBlob = await readAsBlobOrTypedArray(reader, fileDataStart, rawEntry.compressedSize);
-    const result = await inflateRawAsync(typedArrayOrBlob instanceof Uint8Array ? typedArrayOrBlob : typedArrayOrBlob, rawEntry.uncompressedSize, type);
+    const result = await inflateRawAsync(typedArrayOrBlob, rawEntry.uncompressedSize, type);
     return result;
+}
+async function inflateEntryDataStream(reader, rawEntry, fileDataStart, decompress, chunkSize) {
+    const src = await readAsStream(reader, fileDataStart, rawEntry.compressedSize);
+    return inflateRawStream(src, rawEntry.uncompressedSize, decompress, chunkSize);
+}
+async function readEntryDataAsStream(reader, rawEntry, chunkSize) {
+    const { decompress, fileDataStart } = await readEntryDataHeader(reader, rawEntry);
+    return await inflateEntryDataStream(reader, rawEntry, fileDataStart, decompress, chunkSize);
 }
 function setOptions(options) {
     setOptions$1(options);

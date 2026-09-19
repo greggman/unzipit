@@ -1,6 +1,5 @@
-/* global DecompressionStream */
-
-import {isNode, isBlob, readBlobAsUint8Array} from './utils.js';
+import {isNode} from './utils.js';
+import {inflateToResult} from './inflate-stream.js';
 import type {InflateRequestMessage, InflateResultMessage} from './inflate-types.js';
 
 export interface UnzipitOptions {
@@ -209,62 +208,6 @@ async function getAvailableWorker(): Promise<AnyWorker | undefined> {
   return availableWorkers.pop();
 }
 
-async function decompressRaw(src: Uint8Array<ArrayBuffer>, limit?: number): Promise<Uint8Array<ArrayBuffer>> {
-  const ds = new DecompressionStream('deflate-raw');
-  const writer = ds.writable.getWriter();
-  // Do not await the write — doing so before reading causes a deadlock when
-  // the internal buffer fills due to backpressure.
-  writer.write(src).then(() => writer.close()).catch(() => {});
-  const chunks: Uint8Array[] = [];
-  const reader = ds.readable.getReader();
-  let seen = 0;
-  for (;;) {
-    const {done, value} = await reader.read();
-    if (done) {
-      break;
-    }
-    // If this chunk would push us past the configured/declared limit, abort
-    const newSeen = seen + value.byteLength;
-    if (typeof limit === 'number' && newSeen > limit) {
-      throw new Error(`decompressed size exceeds limit: ${newSeen} > ${limit}`);
-    }
-    chunks.push(value);
-    seen = newSeen;
-  }
-  const size = chunks.reduce((s, c) => s + c.byteLength, 0);
-  const result = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) {
-    result.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return result;
-}
-
-// @param {Uint8Array} src
-// @param {string} [type] mime-type
-// @returns {ArrayBuffer|Blob} ArrayBuffer if type is falsy or Blob otherwise.
-async function inflateRawLocal(
-    src: Uint8Array<ArrayBuffer>,
-    uncompressedSize: number,
-    type: string | undefined,
-    resolve: (value: ArrayBuffer | Blob) => void,
-    reject: (reason: unknown) => void,
-): Promise<void> {
-  try {
-    const limit = uncompressedSize;
-    const dst = await decompressRaw(src, limit);
-    const actual = dst.byteLength;
-    if (typeof uncompressedSize === 'number' && actual !== uncompressedSize) {
-      reject(new Error(`decompressed size mismatch. declared: ${uncompressedSize}, actual: ${actual}`));
-      return;
-    }
-    resolve(type ? new Blob([dst], {type}) : dst.buffer);
-  } catch (e) {
-    reject(e);
-  }
-}
-
 async function processWaitingForWorkerQueue(): Promise<void> {
   if (waitingForWorkerQueue.length === 0) {
     return;
@@ -317,13 +260,18 @@ async function processWaitingForWorkerQueue(): Promise<void> {
   // are pending requests.
   while (waitingForWorkerQueue.length) {
     const {src, uncompressedSize, type, resolve, reject} = waitingForWorkerQueue.shift()!;
-    const data = isBlob(src) ? await readBlobAsUint8Array(src) : src;
     try {
-      await inflateRawLocal(data, uncompressedSize, type, resolve, reject);
+      resolve(await inflateToResult(src, uncompressedSize, type));
     } catch (e) {
       reject(e);
     }
   }
+}
+
+// True if inflating should go through the worker queue. When false, callers
+// stream the entry directly (see inflate-stream.ts) and skip the queue.
+export function shouldUseWorkers(): boolean {
+  return config.useWorkers && canUseWorkers;
 }
 
 export function setOptions(options: UnzipitOptions): void {

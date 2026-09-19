@@ -5,4 +5,5 @@ export declare class HTTPRangeReader implements Reader {
     constructor(url: string);
     getLength(): Promise<number>;
     read(offset: number, size: number): Promise<Uint8Array<ArrayBuffer>>;
+    readStream(offset: number, size: number): Promise<ReadableStream<Uint8Array>>;
 }

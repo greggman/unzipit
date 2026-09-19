@@ -2,11 +2,13 @@
 const assert = chai.assert;
 
 import {unzip, unzipRaw, setOptions, cleanup, HTTPRangeReader} from '../../dist/unzipit.module.js';
+import {makeVirtualZipReader, chunkMatchesPattern, kBlockUncompressedSize} from './virtual-zip.js';
+
 function readBlobAsArrayBuffer(blob) {
   return blob.arrayBuffer();
 }
 
-async function assertThrowsAsync(method, msg = '') {
+async function assertThrowsAsync(method, msg = '', messageRE) {
   let error = null;
   try {
     await method();
@@ -14,6 +16,9 @@ async function assertThrowsAsync(method, msg = '') {
     error = err;
   }
   assert.instanceOf(error, Error, msg);
+  if (messageRE) {
+    assert.match(error.message, messageRE, msg);
+  }
 }
 
 async function strictFetch(...args) {
@@ -27,6 +32,28 @@ async function strictFetch(...args) {
 async function readBlobAsUint8Array(blob) {
   const arrayBuffer = await readBlobAsArrayBuffer(blob);
   return new Uint8Array(arrayBuffer);
+}
+
+async function readStreamChunks(stream) {
+  const chunks = [];
+  const reader = stream.getReader();
+  for (;;) {
+    const {done, value} = await reader.read();
+    if (done) {
+      return chunks;
+    }
+    chunks.push(value);
+  }
+}
+
+function concatChunks(chunks) {
+  const result = new Uint8Array(chunks.reduce((sum, c) => sum + c.length, 0));
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return result;
 }
 
 async function sha256(uint8View) {
@@ -189,6 +216,59 @@ describe('unzipit', function() {
       }
     });
 
+    it('can get stream', async() => {
+      const {entries} = await loader.load('./data/stuff.zip');
+      const tests = [
+        { name: 'stuff/dog.txt', compressionMethod: 0, expected: utf8Encoder.encode('german shepard\n') },
+        { name: 'stuff/long.txt', compressionMethod: 8, expected: utf8Encoder.encode(longContent) },
+      ];
+      for (const {name, expected, compressionMethod} of tests) {
+        const entry = entries[name];
+        assert.equal(entry.compressionMethod, compressionMethod, 'check that stuff.zip is built correctly for test');
+        const chunks = await readStreamChunks(await entry.stream());
+        assert.deepEqual(concatChunks(chunks), expected);
+      }
+    });
+
+    it('stream of empty entry (directory) is empty', async() => {
+      const {entries} = await loader.load('./data/stuff.zip');
+      const chunks = await readStreamChunks(await entries['stuff/'].stream());
+      assert.equal(concatChunks(chunks).length, 0);
+    });
+
+    it('can stream large entries', async() => {
+      const {entries} = await loader.load('./data/large.zip');
+      for (const [name, expect] of Object.entries(onlyFiles(expectedLarge))) {
+        const chunks = await readStreamChunks(await entries[name].stream());
+        const sig = await sha256(concatChunks(chunks));
+        assert.equal(sig, expect.sha256, name);
+      }
+    });
+
+    it('stream with chunkSize makes chunks of exactly chunkSize except the last', async() => {
+      const {entries} = await loader.load('./data/large.zip');
+      const name = 'large/colosseum.jpg';
+      const entry = entries[name];
+      const chunkSize = 100000;
+      const chunks = await readStreamChunks(await entry.stream({chunkSize}));
+      assert.equal(chunks.length, Math.ceil(entry.size / chunkSize));
+      for (const chunk of chunks.slice(0, -1)) {
+        assert.equal(chunk.byteLength, chunkSize);
+      }
+      assert.equal(chunks[chunks.length - 1].byteLength, entry.size - chunkSize * (chunks.length - 1));
+      const sig = await sha256(concatChunks(chunks));
+      assert.equal(sig, expectedLarge[name].sha256);
+    });
+
+    it('stream rejects bad chunkSize', async() => {
+      const {entries} = await loader.load('./data/stuff.zip');
+      for (const chunkSize of [0, -1, 1.5, NaN]) {
+        await assertThrowsAsync(async() => {
+          await entries['stuff/long.txt'].stream({chunkSize});
+        }, `chunkSize: ${chunkSize}`);
+      }
+    });
+
     it('works with Promise.all()', async() => {
       const {entries} = await loader.load('./data/large.zip');
       await Promise.all(Object.values(entries).map(async(entry) => {
@@ -207,6 +287,27 @@ describe('unzipit', function() {
       const {entries} = await loader.load('./data/deflate-size-larger-than-entry.zip');
       await assertThrowsAsync(async() => {
         await entries['bomb.txt'].arrayBuffer();
+      });
+    });
+
+    it('rejects when declared uncompressedSize is smaller than actual (size-mismatch) via blob()', async() => {
+      const {entries} = await loader.load('./data/deflate-size-larger-than-entry.zip');
+      await assertThrowsAsync(async() => {
+        await entries['bomb.txt'].blob();
+      });
+    });
+
+    it('stream errors when declared uncompressedSize is smaller than actual (size-mismatch)', async() => {
+      const {entries} = await loader.load('./data/deflate-size-larger-than-entry.zip');
+      await assertThrowsAsync(async() => {
+        await readStreamChunks(await entries['bomb.txt'].stream());
+      });
+    });
+
+    it('stream rejects encrypted entries', async() => {
+      const {entries} = await loader.load('./data/zip-with-zipcrypto-password-test.zip');
+      await assertThrowsAsync(async() => {
+        await entries['zip-with-password-test/compressed.txt'].stream();
       });
     });
 
@@ -464,5 +565,86 @@ describe('unzipit', function() {
 
   }
 
+  describe('streaming with a virtual zip', function() {
+
+    // 64KiB blocks: 16 blocks = 1MiB
+    const kBlocksPerMiB = 1024 * 1024 / kBlockUncompressedSize;
+
+    for (const useWorkers of [false, true]) {
+      describe(useWorkers ? 'with workers' : 'without workers', function() {
+        before(() => {
+          setOptions(useWorkers
+              ? {workerURL: '../dist/unzipit-worker.module.js', numWorkers: 2}
+              : {useWorkers: false});
+        });
+
+        after(() => {
+          cleanup();
+        });
+
+        for (const [desc, delta] of [['larger', 1], ['smaller', -1]]) {
+          it(`rejects when declared uncompressedSize is ${desc} than actual`, async() => {
+            const actualSize = 3 * kBlocksPerMiB * kBlockUncompressedSize;
+            const makeEntry = async() => {
+              const reader = makeVirtualZipReader({numBlocks: 3 * kBlocksPerMiB, declaredSize: actualSize + delta});
+              const {entries} = await unzip(reader);
+              return entries[reader.name];
+            };
+            const sizeErrorRE = /decompressed size/;
+            await assertThrowsAsync(async() => {
+              await (await makeEntry()).arrayBuffer();
+            }, 'arrayBuffer', sizeErrorRE);
+            await assertThrowsAsync(async() => {
+              await (await makeEntry()).blob();
+            }, 'blob', sizeErrorRE);
+            await assertThrowsAsync(async() => {
+              await readStreamChunks(await (await makeEntry()).stream());
+            }, 'stream', sizeErrorRE);
+          });
+        }
+      });
+    }
+
+    it('can blob() an entry from a Reader without holding it all in memory', async function() {
+      this.timeout(60000);
+      setOptions({useWorkers: false});
+      const reader = makeVirtualZipReader({numBlocks: 256 * kBlocksPerMiB});
+      const {entries} = await unzip(reader);
+      const blob = await entries[reader.name].blob('application/x-test');
+      assert.equal(blob.size, reader.actualSize);
+      assert.equal(blob.type, 'application/x-test');
+      assert.isAtMost(reader.maxReadSize, 1024 * 1024, 'reads are made in small pieces');
+      const pos = blob.size - 12345;
+      const tail = new Uint8Array(await blob.slice(pos).arrayBuffer());
+      assert.isTrue(chunkMatchesPattern(tail, pos));
+    });
+
+    it('can stream a 4.5GiB zip64 entry in 16MiB chunks', async function() {
+      this.timeout(5 * 60 * 1000);
+      const reader = makeVirtualZipReader({numBlocks: 4608 * kBlocksPerMiB});
+      const {entries} = await unzip(reader);
+      const entry = entries[reader.name];
+      assert.isAbove(entry.size, 2 ** 32, 'needs zip64');
+
+      const chunkSize = 16 * 1024 * 1024;
+      const stream = await entry.stream({chunkSize});
+      const streamReader = stream.getReader();
+      let pos = 0;
+      for (;;) {
+        const {done, value} = await streamReader.read();
+        if (done) {
+          break;
+        }
+        if (pos + value.byteLength < entry.size) {
+          assert.equal(value.byteLength, chunkSize);
+        }
+        assert.isTrue(chunkMatchesPattern(value, pos), `data at ${pos}`);
+        pos += value.byteLength;
+      }
+      assert.equal(pos, entry.size);
+      assert.isAtMost(reader.maxReadSize, 1024 * 1024, 'reads are made in small pieces');
+    });
+
+  });
 
 });

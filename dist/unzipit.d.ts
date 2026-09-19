@@ -19,6 +19,9 @@ export interface ZipInfo {
         [key: string]: ZipEntry;
     };
 }
+export interface StreamOptions {
+    chunkSize?: number;
+}
 export type TypedArray = Int8Array | Uint8Array | Int16Array | Uint16Array | Int32Array | Uint32Array | Float32Array;
 interface ExtraField {
     id: number;
@@ -64,6 +67,7 @@ export declare class ZipEntry {
     versionMadeBy: number;
     constructor(reader: Reader, rawEntry: RawEntry);
     blob(type?: string): Promise<Blob>;
+    stream(options?: StreamOptions): Promise<ReadableStream<Uint8Array>>;
     arrayBuffer(): Promise<ArrayBuffer>;
     text(): Promise<string>;
     json(): Promise<any>;
