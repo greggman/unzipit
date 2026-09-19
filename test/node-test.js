@@ -1,15 +1,35 @@
 
 import {assert} from 'chai';
+import {Buffer} from 'buffer';
 import {createHash} from 'crypto';
 import {promises as fsPromises} from 'fs';
 import path from 'path';
 import {fileURLToPath} from 'url';
 import {unzip, setOptions, cleanup} from '../dist/unzipit.module.js';
+import {makeVirtualZipReader, chunkMatchesPattern, kBlockUncompressedSize} from './tests/virtual-zip.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 async function sha256(uint8view) {
   return createHash('sha256').update(uint8view).digest('hex');
+}
+
+async function readStreamChunks(stream) {
+  const chunks = [];
+  for await (const chunk of stream) {
+    chunks.push(chunk);
+  }
+  return chunks;
+}
+
+async function assertRejects(fn, msg) {
+  let error;
+  try {
+    await fn();
+  } catch (e) {
+    error = e;
+  }
+  assert.instanceOf(error, Error, msg);
 }
 
 async function checkZipEntriesMatchExpected(entries, expectedFiles) {
@@ -131,6 +151,31 @@ describe('unzipit', function() {
       reader.close();
     });
 
+    it('can stream entries', async() => {
+      const reader = new FileReader(path.join(__dirname, 'data', 'large.zip'));
+      const {entries} = await unzip(reader);
+      const entry = entries['large/colosseum.jpg'];
+      const chunks = await readStreamChunks(await entry.stream({chunkSize: 100000}));
+      assert.equal(chunks.length, Math.ceil(entry.size / 100000));
+      const sig = await sha256(Buffer.concat(chunks));
+      assert.equal(sig, '6081d144babcd0c2d3ea5c49de83811516148301d9afc6a83f5e63c3cd54d00a');
+      reader.close();
+    });
+
+    for (const [desc, delta] of [['larger', 1], ['smaller', -1]]) {
+      it(`rejects when declared uncompressedSize is ${desc} than actual`, async() => {
+        const numBlocks = 48;
+        const makeEntry = async() => {
+          const reader = makeVirtualZipReader({numBlocks, declaredSize: numBlocks * kBlockUncompressedSize + delta});
+          const {entries} = await unzip(reader);
+          return entries[reader.name];
+        };
+        await assertRejects(async() => (await makeEntry()).arrayBuffer(), 'arrayBuffer');
+        await assertRejects(async() => (await makeEntry()).blob(), 'blob');
+        await assertRejects(async() => readStreamChunks(await (await makeEntry()).stream()), 'stream');
+      });
+    }
+
     it('rejects when declared uncompressedSize is smaller than actual (size-mismatch)', async() => {
       const zip = await fsPromises.readFile(path.join(__dirname, 'data', 'deflate-size-larger-than-entry.zip'));
       const { entries } = await unzip(new Uint8Array(zip));
@@ -151,6 +196,37 @@ describe('unzipit', function() {
     });
 
     addTests();
+
+  });
+
+  describe('streaming', () => {
+
+    it('streams a 4.5GiB zip64 entry without holding it in memory', async function() {
+      this.timeout(5 * 60 * 1000);
+      setOptions({useWorkers: false});
+      const reader = makeVirtualZipReader({numBlocks: 4608 * 16});
+      const {entries} = await unzip(reader);
+      const entry = entries[reader.name];
+      assert.isAbove(entry.size, 2 ** 32, 'needs zip64');
+
+      const chunkSize = 16 * 1024 * 1024;
+      const baseRSS = process.memoryUsage().rss;
+      let peakRSS = baseRSS;
+      let pos = 0;
+      for await (const chunk of await entry.stream({chunkSize})) {
+        if (pos + chunk.byteLength < entry.size) {
+          assert.equal(chunk.byteLength, chunkSize);
+        }
+        assert.isTrue(chunkMatchesPattern(chunk, pos), `data at ${pos}`);
+        pos += chunk.byteLength;
+        peakRSS = Math.max(peakRSS, process.memoryUsage().rss);
+      }
+      assert.equal(pos, entry.size);
+      assert.isAtMost(reader.maxReadSize, 1024 * 1024, 'reads are made in small pieces');
+      // The entry is 4.5GiB. Holding it (or its 43MB of compressed data) would blow way past this.
+      const growthMB = (peakRSS - baseRSS) / 1024 / 1024;
+      assert.isBelow(growthMB, 512, `memory grew by ${growthMB.toFixed(0)}MB`);
+    });
 
   });
 

@@ -1,4 +1,5 @@
 import {unzip, setOptions} from 'unzipit';
+import type {StreamOptions} from 'unzipit';
 import * as chai from 'chai';
 
 interface TestPromiseInfo {
@@ -49,6 +50,23 @@ describe('typescript', () => {
         assert.deepEqual(new Uint8Array(arrayBuffer,), expectedBytes);
       }
     }
+  });
+
+  it('streams', async() => {
+    const {entries} = await unzip('../data/stuff.zip');
+    const entry = entries['stuff/long.txt'];
+    const options: StreamOptions = {chunkSize: 100};
+    const stream: ReadableStream<Uint8Array> = await entry.stream(options);
+    const reader = stream.getReader();
+    let size = 0;
+    for (;;) {
+      const {done, value} = await reader.read();
+      if (done) {
+        break;
+      }
+      size += value.byteLength;
+    }
+    assert.equal(size, entry.size);
   });
 });
 

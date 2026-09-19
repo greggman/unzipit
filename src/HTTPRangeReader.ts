@@ -35,4 +35,23 @@ export class HTTPRangeReader implements Reader {
     const buffer = await req.arrayBuffer();
     return new Uint8Array(buffer);
   }
+  async readStream(offset: number, size: number): Promise<ReadableStream<Uint8Array>> {
+    if (size === 0) {
+      return new Blob([]).stream();
+    }
+    const req = await fetch(this.url, {
+      headers: {
+        Range: `bytes=${offset}-${offset + size - 1}`,
+      },
+    });
+    if (!req.ok) {
+      throw new Error(`failed http request ${this.url}, status: ${req.status} offset: ${offset} size: ${size}: ${req.statusText}`);
+    }
+    // A server that ignores Range sends the whole file with a 200.
+    // Streaming that would silently produce the wrong bytes.
+    if (req.status !== 206) {
+      throw new Error(`server did not honor range request for ${this.url}, status: ${req.status}`);
+    }
+    return req.body!;
+  }
 }
