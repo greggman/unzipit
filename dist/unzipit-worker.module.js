@@ -1,4 +1,4 @@
-/* unzipit@2.0.3, license MIT */
+/* unzipit@2.1.1, license MIT */
 var _a, _b;
 function isBlob(v) {
     return typeof Blob !== 'undefined' && v instanceof Blob;

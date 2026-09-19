@@ -462,6 +462,9 @@ class ZipEntry {
   async blob(type?: string): Blob,  // returns a Blob for this entry
                                     //  (optional type as in 'image/jpeg')
   async arrayBuffer(): ArrayBuffer, // returns an ArrayBuffer for this entry
+  async stream(options?: StreamOptions): ReadableStream<Uint8Array>,
+                                    // returns a stream of this entry's bytes
+                                    // (see "Streaming large entries" below)
   async text(): string,             // returns text, assumes the text is valid utf8.
                                     // If you want more options decode arrayBuffer yourself
   async json(): any,                // returns text with JSON.parse called on it.
@@ -481,11 +484,21 @@ class ZipEntry {
 ```
 
 ```js
+interface StreamOptions {
+  chunkSize?: number,  // if set, every chunk is exactly this size except the last
+}
+```
+
+```js
 interface Reader {
   async getLength(): number,
   async read(offset, size): Uint8Array,
+  async readStream?(offset, size): ReadableStream<Uint8Array>,  // optional
 }
 ```
+
+`readStream` is optional. `entry.stream()` uses it if it exists. Otherwise it
+calls `read` repeatedly with pieces of at most 1MiB.
 
 ## setOptions
 
@@ -590,6 +603,55 @@ If you're going to use unzipit to create files you should check and sanitize you
 If you pass in an `ArrayBuffer` or `SharedArrayBuffer` you need to keep the data unchanged
 until you're finished using the data. The library doesn't make a copy, it uses the buffer directly.
 
+## Streaming large entries
+
+`entry.blob()` and `entry.arrayBuffer()` both return the entire entry so the whole
+thing has to fit somewhere. `entry.stream()` returns a `ReadableStream` instead.
+Data is read and decompressed only as you consume the stream, so memory use stays
+at a few chunks no matter how large the entry is.
+
+```js
+const {entries} = await unzip(fileOrBlob);
+const entry = entries['some/huge/file.bin'];
+
+// for example, save it to a file with the File System Access API
+const fileHandle = await window.showSaveFilePicker();
+const writable = await fileHandle.createWritable();
+await (await entry.stream()).pipeTo(writable);
+```
+
+Pass `{chunkSize}` to get chunks of a fixed size, for example
+`entry.stream({chunkSize: 16 * 1024 * 1024})` for 16MiB chunks.
+
+Notes:
+
+* The size of the entry's data is checked against the size declared in the zip file.
+  If it doesn't match, the stream errors. When there is too little data, this can only
+  be known at the very end, so treat the data as unverified until the stream closes
+  without an error.
+* The source must be readable in pieces. A `Blob`/`File`, an `HTTPRangeReader`, or your own
+  `Reader` all work. A url passed directly to `unzip` downloads the whole zip file first.
+  To stream from a url, use an `HTTPRangeReader` (the server must support range requests):
+
+  ```js
+  const reader = new HTTPRangeReader('https://example.com/huge.zip');
+  const {entries} = await unzip(reader);
+  const stream = await entries['some/huge/file.bin'].stream();
+  // unzip downloaded only the zip's directory. This entry's data is
+  // downloaded as the stream is read, in a single range request.
+  const streamReader = stream.getReader();
+  for (;;) {
+    const {done, value} = await streamReader.read();
+    if (done) {
+      break;
+    }
+    // value is a Uint8Array with the next part of the entry's data
+    console.log('got', value.byteLength, 'bytes');
+  }
+  ```
+
+* Streams are not sent to workers. Decompression uses the built-in `DecompressionStream`.
+
 ## Handling giant entries
 
 There is no way for the library to know what "too large" means to you.
@@ -612,8 +674,8 @@ Put it on the TODO list 😅
 
 ## File Attributes
 
-If you want to make an unzip utilitiy using this library you'll need to be able to mark some files as executable.
-That is unforutunately platform specific. For example, Windows has no concept of "mark a file as executable".
+If you want to make an unzip utility using this library you'll need to be able to mark some files as executable.
+That is unfortunately platform specific. For example, Windows has no concept of "mark a file as executable".
 Each zip entry provides a `versionMadeBy` and `externalFileAttributes` property. You could theoretically use
 that to set file attributes. For example
 
@@ -676,7 +738,7 @@ Follow the instructions on testing but add  `?timeout=0` to the URL as in `http:
 
 * The code is **heavily** based on [yauzl](https://github.com/thejoshwolfe/yauzl)
 
-# Licence
+# License
 
 MIT
 
